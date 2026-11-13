@@ -164,6 +164,21 @@ h1 span,.title-xl span{color:var(--accent)}
 .web-note{text-align:center;background:var(--bg2);border:1px dashed var(--line);border-radius:16px;padding:12px}
 
 .spinning .sticky{visibility:hidden}
+/* إحصائيات اللاعبين */
+.stats-mini{display:flex;gap:8px;font-size:12px;font-weight:700;color:var(--muted);margin-top:1px}
+.stats-mini .sl{white-space:nowrap}
+.pl{cursor:pointer}
+.pl .n,.vopt .n{display:flex;flex-direction:column}
+.vopt .info{position:relative;width:32px;height:32px;border-radius:10px;background:#0003;display:flex;align-items:center;justify-content:center;font-size:15px;pointer-events:auto;flex:none}
+.vlist.locked .vopt .info{pointer-events:auto}
+.vlist.locked .vopt{pointer-events:auto}
+.vlist.locked .vopt:active{transform:none}
+.pc{display:flex;flex-direction:column;align-items:center;gap:8px}
+.pc .pf-av{width:80px;height:80px;font-size:38px}
+.pc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%;margin:6px 0}
+.pc-stats div{background:var(--card);border-radius:16px;padding:12px 4px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.pc-stats b{font-size:28px;font-weight:900;color:var(--accent)}
+.pc-stats span{font-size:12px;font-weight:700;color:var(--muted);line-height:1.4}
 /* الملف الشخصي */
 .pf-av{width:96px;height:96px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:900;color:#1a1530;background:var(--accent);box-shadow:0 10px 26px #0006;animation:pop .6s var(--ease-back) both}
 .pf-form{width:100%;max-width:340px;display:flex;flex-direction:column;gap:8px;text-align:right}

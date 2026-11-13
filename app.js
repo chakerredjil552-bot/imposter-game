@@ -357,6 +357,52 @@ let lastState = null;
 let discovering = false;
 let webLinks = [];     // روابط صفحة الويب عند القائد (للآيفون)
 let httpPort = HTTP_PORT;
+
+// ----- إحصائيات اللاعب (أونلاين فقط، بعد التصويت) -----
+// imp: ربح كمحتال • crew: ربح كبريء • right: خمّن المحتال صح • games: جولات بالتصويت
+function cleanStats(s){
+  s = s || {};
+  const n = v => Math.max(0, Math.min(99999, Math.floor(+v || 0)));
+  return { imp: n(s.imp), crew: n(s.crew), right: n(s.right), games: n(s.games) };
+}
+function getStats(){ return cleanStats(store.get("stats", null)); }
+function sendMe(){
+  const msg = { a: "me", full: profile ? profile.name : "", stats: getStats() };
+  if(isHost && room){ const p = room.player(myId); if(p){ p.full = msg.full; p.stats = msg.stats; room.sync(); } }
+  else if(net) net.send({ d: msg });
+}
+// نحسبو نتيجة الجولة مرة وحدة برك
+function countRound(s){
+  const r = s.round;
+  if(!r || !r.me || !r.reveal || !r.reveal.result) return;
+  const key = s.sid + ":" + r.no;
+  const done = store.get("counted", []);
+  if(done.includes(key)) return;
+  done.push(key); store.set("counted", done.slice(-60));
+  const st = getStats(), res = r.reveal.result;
+  st.games++;
+  if(r.me.isImp && res.winner === "imposter") st.imp++;
+  if(!r.me.isImp && res.winner === "players") st.crew++;
+  if(!r.me.isImp && res.myVoteIdx >= 0 && r.reveal.impIdx.includes(res.myVoteIdx)) st.right++;
+  store.set("stats", st);
+  sendMe();
+}
+function statLine(st){
+  st = cleanStats(st);
+  return `<span class="sl" title="ربح كمحتال">😈 ${st.imp}</span><span class="sl" title="ربح كبريء">😇 ${st.crew}</span><span class="sl" title="خمّن صح">🎯 ${st.right}</span>`;
+}
+// بطاقة اللاعب
+function showPlayerCard(p){
+  if(!p) return;
+  const st = cleanStats(p.stats);
+  $("pcAv").textContent = (p.name.trim()[0] || "؟"); $("pcAv").style.background = avColor(p.id);
+  $("pcNick").textContent = p.name + (p.host ? " 👑" : "");
+  $("pcName").textContent = p.full ? "الاسم: " + p.full : "";
+  $("pcImp").textContent = st.imp; $("pcCrew").textContent = st.crew; $("pcRight").textContent = st.right;
+  $("pcGames").textContent = st.games ? `لعب ${st.games} جولات بالتصويت` : "ما زال ما لعب حتى جولة بالتصويت";
+  $("pcard").classList.remove("hidden"); vibe(10);
+}
+function closePlayerCard(){ $("pcard").classList.add("hidden"); }
 // رابط الدعوة: يفتح التطبيق في الغرفة، ولا المتصفح
 function inviteLink(){
   const s = lastState; if(!s || !s.ips.length) return null;
@@ -419,7 +465,8 @@ class Link {
 // ----- القائد: منطق الغرفة كامل هنا، والباقي يستقبلو الحالة -----
 class HostRoom {
   constructor(name){
-    this.players = [{ id: myId, name, online: true, host: true }];
+    this.players = [{ id: myId, name, online: true, host: true, full: profile ? profile.name : "", stats: getStats() }];
+    this.sid = uid();   // رقم الغرفة باش الجولات ما يتحسبوش مرتين
     this.settings = store.get("hostSettings", { imps: 1, hint: true, cats: CATS.map(c => c.id) });
     this.settings.cats = this.settings.cats.filter(catById);
     this.phase = "lobby";
@@ -451,6 +498,7 @@ class HostRoom {
       if(!p) return;
       if(d.a === "seen" && this.round && this.round.ids.includes(p.id) && !this.round.seen.includes(p.id)){ this.round.seen.push(p.id); this.sync(); }
       if(d.a === "vote") this.castVote(p.id, d.target, d.no);
+      if(d.a === "me"){ p.full = String(d.full || "").slice(0, 20); p.stats = cleanStats(d.stats); this.sync(); }
       if(d.a === "bye"){ this.players = this.players.filter(x => x.id !== p.id); if(this.round) this.round.ids = this.round.ids.filter(x => x !== p.id); this.sync(); }
     }
   }
@@ -531,14 +579,15 @@ class HostRoom {
     const r = this.round, inRound = !!(r && r.ids.includes(pid));
     const s = {
       phase: this.phase, roomName: this.roomName, ips: this.ips,
-      players: this.players.map(p => ({ id: p.id, name: p.name, online: p.online, host: !!p.host })),
+      sid: this.sid,
+      players: this.players.map(p => ({ id: p.id, name: p.name, online: p.online, host: !!p.host, full: p.full || "", stats: p.stats || cleanStats() })),
       settings: this.settings, maxImps: this.maxImps(),
       round: null
     };
     if(r && this.phase !== "lobby"){
       const cat = catById(r.cat);
       s.round = {
-        no: r.no, inRound, count: r.ids.length, seen: r.seen.length,
+        no: r.no, inRound, count: r.ids.length, seen: r.seen.length, pids: r.ids.slice(),
         names: r.ids.map(id => (this.player(id) || {}).name || "؟"),
         firstIdx: r.first ? r.ids.indexOf(r.first) : -1,
         me: inRound ? { isImp: r.imps.includes(pid), word: r.imps.includes(pid) ? null : r.word, catName: cat.name, hint: this.settings.hint } : null,
@@ -659,6 +708,8 @@ function joinRoom(ip, port){
   }, st => {
     if(st === "dead" && !gotState){ leaveRoom(false); toast("ما قدرناش ندخلو للغرفة. تأكد أنكم في نفس الواي فاي"); show("s-w-find"); }
     else connStatus(st);
+    // نبعثو الاسم والإحصائيات للقائد (حتى بعد إعادة الاتصال)
+    if(st === "up") sendMe();
   });
   keepAwake(true);
   toast("⏳ نتصلو بالغرفة…");
@@ -702,6 +753,7 @@ function onState(s){
 
   if(view === "lobby") renderLobby(s, prev);
   if(view === "card" || view === "first" || view === "reveal" || view === "vote") renderRound(s);
+  if(s.phase === "reveal") countRound(s);
 }
 function renderLobby(s){
   $("wCodeBox").classList.toggle("hidden", !isHost || !s.ips.length);
@@ -716,14 +768,19 @@ function renderLobby(s){
   const online = s.players.filter(p => p.online);
   $("wPlayersInfo").textContent = online.length < 3 ? `لازم ${3 - online.length} آخرين على الأقل` : `${online.length} لاعبين جاهزين`;
   const list = $("wPlayers");
-  const key = isHost + "|" + s.players.map(p => p.id + p.online + p.name).join("|");
+  const key = isHost + "|" + s.players.map(p => p.id + p.online + p.name + JSON.stringify(p.stats)).join("|");
   if(list.dataset.key !== key){
     list.dataset.key = key;
-    list.innerHTML = s.players.map(p => `<div class="pl ${p.online ? "" : "off"}">
+    list.innerHTML = s.players.map(p => `<div class="pl ${p.online ? "" : "off"}" data-pid="${p.id}">
       <span class="av" style="background:${avColor(p.id)}">${esc(p.name.trim()[0] || "؟")}</span>
-      <span class="n">${esc(p.name)}${p.id === myId ? " (أنت)" : ""}</span>
+      <span class="n">${esc(p.name)}${p.id === myId ? " (أنت)" : ""}<span class="stats-mini">${statLine(p.stats)}</span></span>
       <span class="tag">${p.host ? "👑 القائد" : p.online ? "" : "غير متصل"}</span>
       ${isHost && !p.host ? `<button class="kick" data-kick="${p.id}">✕</button>` : ""}</div>`).join("");
+    // اضغط على لاعب باش تشوف بطاقتو
+    list.querySelectorAll(".pl").forEach(row => row.onclick = e => {
+      if(e.target.closest("[data-kick]")) return;
+      showPlayerCard(lastState.players.find(x => x.id === row.dataset.pid));
+    });
     list.querySelectorAll("[data-kick]").forEach(b => b.onclick = async () => {
       const p = s.players.find(x => x.id === b.dataset.kick);
       if(p && await ask(`تخرّج ${p.name} من الغرفة؟`)) room.kick(p.id);
@@ -841,13 +898,16 @@ function renderVote(r){
   const max = Math.max(1, ...v.counts);
   const top = Math.max(...v.counts);
   const list = $("wVoteList");
-  const key = r.names.join("|");
+  const pl = i => lastState.players.find(p => p.id === (r.pids || [])[i]);
+  const key = r.names.join("|") + "|" + (r.pids || []).map(id => JSON.stringify((lastState.players.find(p => p.id === id) || {}).stats)).join("|");
   if(list.dataset.key !== key){
     list.dataset.key = key;
-    list.innerHTML = r.names.map((n, i) => `<button class="vopt ${i === v.myIdx ? "me" : ""}" data-i="${i}" style="animation-delay:${i * 0.05}s">
-      <span class="bar"></span><span class="av" style="background:${avColor(n + i)}">${esc(n.trim()[0] || "؟")}</span>
-      <span class="n">${esc(n)}${i === v.myIdx ? " (أنت)" : ""}</span><span class="vc">0</span></button>`).join("");
-    list.querySelectorAll(".vopt").forEach(b => b.onclick = () => {
+    list.innerHTML = r.names.map((n, i) => { const p = pl(i); return `<button class="vopt ${i === v.myIdx ? "me" : ""}" data-i="${i}" style="animation-delay:${i * 0.05}s">
+      <span class="bar"></span><span class="av" style="background:${avColor(p ? p.id : n + i)}">${esc(n.trim()[0] || "؟")}</span>
+      <span class="n">${esc(n)}${i === v.myIdx ? " (أنت)" : ""}<span class="stats-mini">${statLine(p && p.stats)}</span></span>
+      <span class="info" data-info="${i}" aria-label="بطاقة اللاعب">👤</span><span class="vc">0</span></button>`; }).join("");
+    list.querySelectorAll(".vopt").forEach(b => b.onclick = e => {
+      if(e.target.closest("[data-info]")){ e.stopPropagation(); showPlayerCard(pl(+b.dataset.i)); return; }
       if(lastState.round.vote.myVote >= 0) return;
       votePick = +b.dataset.i; vibe(10); renderVote(lastState.round);
     });
@@ -875,6 +935,8 @@ $("wVoteOk").onclick = async () => {
   vibe(30);
 };
 $("wVote").onclick = () => room && room.startVote();
+$("pcClose").onclick = closePlayerCard;
+$("pcard").onclick = e => { if(e.target.id === "pcard") closePlayerCard(); };
 $("wCode").onclick = copyCode;
 $("wCopyCode").onclick = copyCode;
 $("wInvite").onclick = sendInvite;
@@ -1074,6 +1136,7 @@ if(APP){
   APP.addListener("backButton", () => {
     if(!$("modal").classList.contains("hidden")){ $("mNo").click(); return; }
     if(!$("sheet").classList.contains("hidden")){ closeSheet(); return; }
+    if(!$("pcard").classList.contains("hidden")){ closePlayerCard(); return; }
     const on = document.querySelector(".screen.on");
     if(!on || on.id === "s-home" || (on.id === "s-profile" && !hasProfile())) APP.exitApp();
     else if(on.id === "s-w-find") document.querySelector("[data-wback]").click();
