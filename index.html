@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#151229">
+<title>شكون المحتال؟</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-512.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="المحتال">
+<meta name="description" content="شكون المحتال؟ لعبة جماعية بالعربية — صُنع بواسطة Chaker Red">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+<!-- ===== أول تشغيل: الأذونات ===== -->
+<section class="screen" id="s-perm">
+  <div class="center">
+    <img src="icon.svg" class="logo pop" alt="">
+    <div class="big">مرحبا بيك! 👋</div>
+    <p class="lead">باش تلعب مع صحابك في نفس الواي فاي، اللعبة تحتاج إذن <b>الأجهزة القريبة والشبكة المحلية</b>.<br>هذا الطلب مرة وحدة برك.</p>
+    <ul class="perm-list">
+      <li>📶 <span>تلقى الغرف تاع صحابك في نفس الواي فاي</span></li>
+      <li>👑 <span>تفتح غرفة وصحابك يدخلو فيها</span></li>
+      <li>🔒 <span>ما نستعملو حتى معلومات شخصية</span></li>
+    </ul>
+  </div>
+  <button class="btn" id="btnPerm">سماح ومتابعة ✔</button>
+</section>
+
+<!-- ===== شاشة البداية ===== -->
+<section class="screen" id="s-splash">
+  <div class="center splash">
+    <img src="icon.svg" class="logo big-logo" alt="">
+    <div class="title-xl">شكون <span>المحتال؟</span></div>
+    <div class="made">صُنع بواسطة</div>
+    <div class="sign">Chaker Red</div>
+  </div>
+</section>
+
+<!-- ===== القائمة الرئيسية ===== -->
+<section class="screen" id="s-home">
+  <div class="home-head">
+    <img src="icon.svg" class="logo" alt="">
+    <h1>شكون <span>المحتال؟</span></h1>
+    <p class="sub">لعبة جماعية للأصحاب</p>
+  </div>
+  <button class="mode" id="goWifi">
+    <span class="mi">📶</span>
+    <span><b>العب مع صحابك</b><small>كل واحد بهاتفو، في نفس الواي فاي</small></span>
+  </button>
+  <button class="mode alt" id="goPass">
+    <span class="mi">📱</span>
+    <span><b>هاتف واحد</b><small>تمرّرو الهاتف بيناتكم</small></span>
+  </button>
+  <div class="foot">صُنع بواسطة <b>Chaker Red</b></div>
+</section>
+
+<!-- ===== هاتف واحد: الإعدادات ===== -->
+<section class="screen" id="s-pass-setup">
+  <div class="top"><button class="x" data-home>➜</button><span class="chip">هاتف واحد</span><span class="sp"></span></div>
+  <div class="panel">
+    <div class="row">
+      <div class="label">عدد اللاعبين</div>
+      <div class="stepper"><button data-pstep="players" data-d="1">+</button><b id="pPlayers">4</b><button data-pstep="players" data-d="-1">−</button></div>
+    </div>
+    <div class="names" id="pNames"></div>
+  </div>
+  <div class="panel" id="pSettings"></div>
+  <div class="panel">
+    <div class="row"><div class="label">الفئات</div><button class="link" data-allcats="pass">اختيار الكل</button></div>
+    <div class="cats" id="pCats"></div>
+  </div>
+  <div class="sticky"><button class="btn" id="pStart">ابدأ اللعب ▶</button></div>
+</section>
+
+<!-- ===== هاتف واحد: تمرير الهاتف ===== -->
+<section class="screen" id="s-pass">
+  <div class="top"><button class="x" data-quit-pass>✕</button><span class="chip" id="passCat"></span><span class="sp"></span></div>
+  <div class="dots" id="dots"></div>
+  <div class="center">
+    <div class="small" id="passHint">مرّر الهاتف إلى</div>
+    <div class="big pname" id="passName"></div>
+    <div class="flip" id="pFlip"></div>
+  </div>
+  <button class="btn hidden" id="pNext">فهمت، خبّي ومرّر ⬅</button>
+</section>
+
+<section class="screen" id="s-pass-ready">
+  <div class="center">
+    <div class="emoji">🤫</div>
+    <div class="big">الكل شاف كلمتو!</div>
+    <div class="small">حطو الهاتف في الوسط وأضغطو ابدأ</div>
+  </div>
+  <button class="btn" id="pGo">ابدأ ▶</button>
+</section>
+
+<section class="screen" id="s-pass-first">
+  <div class="center">
+    <div class="small">أول واحد يشرح كلمتو</div>
+    <div class="spin" id="pSpin"></div>
+    <div class="small hidden rule" id="pRule">كل واحد يقول كلمة وحدة على كلمتو بلا ما يفضحها،<br>ومن بعد تناقشو وتصوتو على المحتال.</div>
+  </div>
+  <button class="btn red hidden" id="pReveal">انتهينا — اكشف المحتال 🔍</button>
+</section>
+
+<section class="screen" id="s-pass-reveal">
+  <div class="center" id="pRevealBox"></div>
+  <button class="btn" id="pAgain">جولة جديدة 🔁</button>
+  <button class="btn ghost" id="pBack">تبديل الفئات أو اللاعبين</button>
+</section>
+
+<!-- ===== واي فاي: الاسم ===== -->
+<section class="screen" id="s-w-name">
+  <div class="top"><button class="x" data-home>➜</button><span class="chip">📶 العب مع صحابك</span><span class="sp"></span></div>
+  <div class="center">
+    <div class="emoji">🙋</div>
+    <div class="big">واش اسمك؟</div>
+    <input class="field" id="wName" maxlength="14" placeholder="اكتب اسمك">
+    <div class="small">كل الصحاب لازم يكونو في نفس الواي فاي،<br>ولا متصلين بنقطة الاتصال (هوتسبوت) تاع القائد.</div>
+  </div>
+  <button class="btn" id="wHost">👑 إنشاء غرفة</button>
+  <button class="btn ghost" id="wJoin">🔎 انضمام لغرفة</button>
+  <div class="small web-note hidden" id="wWebNote">👑 الغرفة يفتحها القائد من تطبيق أندرويد.<br>أنت تقدر تدخل لغرفة صحابك من هنا 👇</div>
+</section>
+
+<!-- ===== واي فاي: البحث عن غرف ===== -->
+<section class="screen" id="s-w-find">
+  <div class="top"><button class="x" data-wback>➜</button><span class="chip">🔎 الغرف القريبة</span><span class="sp"></span></div>
+  <div class="searching" id="wSearching"><span class="radar"></span><span>نقلبو على غرف في نفس الواي فاي…</span></div>
+  <div class="rooms" id="rooms"></div>
+  <div class="panel">
+    <div class="label">ما لقيتش الغرفة؟</div>
+    <div class="small">اكتب رمز الغرفة اللي يبان عند القائد</div>
+    <div class="row" style="margin-top:10px">
+      <input class="field" id="wIp" inputmode="decimal" placeholder="مثال: 192.168.1.5" dir="ltr">
+      <button class="btn small-btn" id="wIpGo">دخول</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== واي فاي: الغرفة / اللعب ===== -->
+<section class="screen" id="s-w-room">
+  <div class="top">
+    <button class="x" id="wLeave">✕</button>
+    <span class="chip" id="wRoomChip"></span>
+    <span class="count" id="wCount"></span>
+  </div>
+  <div class="conn hidden" id="wConn">⏳ إعادة الاتصال…</div>
+
+  <!-- اللوبي -->
+  <div id="v-lobby" class="view">
+    <div class="panel code-panel hidden" id="wCodeBox">
+      <div class="small">رمز الغرفة (لو صحابك ما لقاوهاش)</div>
+      <div class="code" id="wCode" dir="ltr"></div>
+      <div class="web-join hidden" id="wWebBox">
+        <div class="label">📱 صحابك اللي عندهم آيفون</div>
+        <div class="small">يصوّرو هذا الكود بالكاميرا، ولا يفتحو الرابط في Safari</div>
+        <div class="qr" id="wQr"></div>
+        <div class="code small-code" id="wLink" dir="ltr"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="row"><div class="label">اللاعبين</div><div class="small" id="wPlayersInfo"></div></div>
+      <div class="plist" id="wPlayers"></div>
+    </div>
+    <div class="panel" id="wSettings"></div>
+    <div class="panel">
+      <div class="row"><div class="label">الفئات</div><button class="link host-only" data-allcats="wifi">اختيار الكل</button></div>
+      <div class="cats" id="wCats"></div>
+    </div>
+    <div class="sticky">
+      <button class="btn host-only" id="wStart">ابدأ الجولة ▶</button>
+      <div class="wait guest-only">⏳ في انتظار القائد يبدأ الجولة…</div>
+    </div>
+  </div>
+
+  <!-- البطاقة -->
+  <div id="v-card" class="view">
+    <div class="center">
+      <div class="small" id="wCardTop">اضغط على البطاقة باش تشوف كلمتك</div>
+      <div class="flip" id="wFlip"></div>
+      <div class="seen" id="wSeen"></div>
+    </div>
+    <div class="sticky">
+      <button class="btn host-only" id="wFirst">الكل شاف؟ شكون يبدأ؟ 🎲</button>
+      <div class="wait guest-only">كي يشوفو الكل، القائد يختار شكون يبدأ…</div>
+    </div>
+  </div>
+
+  <!-- من يبدأ -->
+  <div id="v-first" class="view">
+    <div class="center">
+      <div class="small">أول واحد يشرح كلمتو</div>
+      <div class="spin" id="wSpin"></div>
+      <div class="small rule hidden" id="wRule">كل واحد يقول كلمة وحدة على كلمتو بلا ما يفضحها،<br>ومن بعد تناقشو وتصوتو على المحتال.</div>
+      <button class="peek" id="wPeek">👁️ شوف كلمتي</button>
+      <div class="peek-box hidden" id="wPeekBox"></div>
+    </div>
+    <div class="sticky">
+      <button class="btn red host-only" id="wReveal">انتهينا — اكشف المحتال 🔍</button>
+      <div class="wait guest-only">تناقشو… القائد هو اللي يكشف المحتال</div>
+    </div>
+  </div>
+
+  <!-- الكشف -->
+  <div id="v-reveal" class="view">
+    <div class="center" id="wRevealBox"></div>
+    <div class="sticky">
+      <button class="btn host-only" id="wAgain">جولة جديدة 🔁</button>
+      <button class="btn ghost host-only" id="wLobby">رجوع للغرفة</button>
+      <div class="wait guest-only">⏳ في انتظار القائد…</div>
+    </div>
+  </div>
+
+  <!-- منتظر الجولة الجاية -->
+  <div id="v-wait" class="view">
+    <div class="center">
+      <div class="emoji">⏳</div>
+      <div class="big">الجولة بدات</div>
+      <div class="small">رايح تدخل مع الجولة الجاية</div>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<div class="modal hidden" id="modal"><div class="mbox"><div id="mText"></div><div class="mbtns"><button class="btn red" id="mYes">إيه</button><button class="btn ghost" id="mNo">لا</button></div></div></div>
+<div class="toast" id="toast"></div>
+<div class="confetti" id="confetti"></div>
+
+<script src="config.js"></script>
+<script src="capacitor.js"></script>
+<script src="qrcode.js"></script>
+<script src="words.js"></script>
+<script src="words2.js"></script>
+<script src="words3.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
