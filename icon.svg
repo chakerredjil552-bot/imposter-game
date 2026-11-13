@@ -1,11 +1,96 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5b3df5"/><stop offset="1" stop-color="#ff5d73"/></linearGradient></defs>
-  <rect width="512" height="512" rx="110" fill="url(#g)"/>
-  <ellipse cx="256" cy="200" rx="150" ry="34" fill="#151229"/>
-  <path d="M150 196 Q160 90 256 90 Q352 90 362 196 Z" fill="#151229"/>
-  <circle cx="256" cy="300" r="110" fill="#ffe6a3"/>
-  <rect x="160" y="268" width="192" height="44" rx="22" fill="#151229"/>
-  <circle cx="212" cy="290" r="9" fill="#ffcf3f"/>
-  <circle cx="300" cy="290" r="9" fill="#ffcf3f"/>
-  <path d="M220 360 Q256 380 292 360" stroke="#151229" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <defs>
+    <radialGradient id="bg" cx="30%" cy="18%" r="95%">
+      <stop offset="0" stop-color="#a48bff"/>
+      <stop offset="0.45" stop-color="#5b3df5"/>
+      <stop offset="1" stop-color="#ff4f7b"/>
+    </radialGradient>
+    <radialGradient id="face" cx="38%" cy="32%" r="75%">
+      <stop offset="0" stop-color="#fff4da"/>
+      <stop offset="0.55" stop-color="#ffd890"/>
+      <stop offset="1" stop-color="#e9a64f"/>
+    </radialGradient>
+    <linearGradient id="hat" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a3f8f"/>
+      <stop offset="1" stop-color="#151229"/>
+    </linearGradient>
+    <linearGradient id="brim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3275"/>
+      <stop offset="1" stop-color="#110e24"/>
+    </linearGradient>
+    <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd84f"/>
+      <stop offset="1" stop-color="#f29a0c"/>
+    </linearGradient>
+    <linearGradient id="coat" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd24a"/>
+      <stop offset="1" stop-color="#d9860a"/>
+    </linearGradient>
+    <linearGradient id="mask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b2450"/>
+      <stop offset="1" stop-color="#0e0b1f"/>
+    </linearGradient>
+    <radialGradient id="badge" cx="35%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#fff2a8"/>
+      <stop offset="0.5" stop-color="#ffcf3f"/>
+      <stop offset="1" stop-color="#f08c00"/>
+    </radialGradient>
+  </defs>
+
+  <!-- الخلفية -->
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <ellipse cx="200" cy="60" rx="260" ry="110" fill="#fff" opacity="0.10"/>
+  <circle cx="90" cy="420" r="70" fill="#fff" opacity="0.05"/>
+  <circle cx="440" cy="330" r="40" fill="#fff" opacity="0.06"/>
+
+  <!-- ظل تحت الشخصية -->
+  <ellipse cx="256" cy="500" rx="170" ry="26" fill="#000" opacity="0.22"/>
+
+  <!-- المعطف -->
+  <path d="M104 512 C112 424 176 384 256 384 C336 384 400 424 408 512 Z" fill="url(#coat)"/>
+  <path d="M206 390 L256 456 L306 390 L282 386 L256 420 L230 386 Z" fill="#b86e05" opacity="0.55"/>
+  <path d="M130 470 C150 430 190 404 230 396" stroke="#fff" stroke-width="10" fill="none" stroke-linecap="round" opacity="0.25"/>
+
+  <!-- ظل الرأس على المعطف -->
+  <ellipse cx="256" cy="392" rx="92" ry="16" fill="#000" opacity="0.18"/>
+
+  <!-- الوجه -->
+  <circle cx="256" cy="284" r="114" fill="url(#face)"/>
+  <ellipse cx="214" cy="236" rx="46" ry="26" fill="#fff" opacity="0.35" transform="rotate(-20 214 236)"/>
+  <ellipse cx="190" cy="328" rx="20" ry="11" fill="#ff7f7f" opacity="0.35"/>
+  <ellipse cx="324" cy="328" rx="20" ry="11" fill="#ff7f7f" opacity="0.35"/>
+
+  <!-- القناع -->
+  <path d="M368 262 L412 244 L404 270 L420 292 L372 290 Z" fill="#1a1533"/>
+  <rect x="136" y="246" width="240" height="58" rx="29" fill="url(#mask)"/>
+  <rect x="150" y="252" width="210" height="10" rx="5" fill="#fff" opacity="0.12"/>
+  <!-- العيون (تشوف للجنب... مشبوه!) -->
+  <ellipse cx="212" cy="276" rx="22" ry="16" fill="#fff"/>
+  <ellipse cx="302" cy="276" rx="22" ry="16" fill="#fff"/>
+  <circle cx="222" cy="279" r="9" fill="#151229"/>
+  <circle cx="312" cy="279" r="9" fill="#151229"/>
+  <circle cx="225" cy="275" r="3" fill="#fff"/>
+  <circle cx="315" cy="275" r="3" fill="#fff"/>
+
+  <!-- الفم: ابتسامة خبيثة -->
+  <path d="M226 346 Q264 368 296 338" stroke="#7a3b1a" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <path d="M290 334 Q300 336 302 344" stroke="#7a3b1a" stroke-width="7" fill="none" stroke-linecap="round"/>
+
+  <!-- القبعة -->
+  <ellipse cx="256" cy="198" rx="172" ry="36" fill="url(#brim)"/>
+  <path d="M160 198 C162 108 200 78 256 78 C312 78 350 108 352 198 Z" fill="url(#hat)"/>
+  <path d="M224 88 Q256 118 288 88" stroke="#7d6fd6" stroke-width="7" fill="none" stroke-linecap="round" opacity="0.6"/>
+  <path d="M162 166 C220 180 292 180 350 166 L352 198 C292 212 220 212 160 198 Z" fill="url(#band)"/>
+  <path d="M182 120 C188 100 204 90 222 86" stroke="#fff" stroke-width="12" fill="none" stroke-linecap="round" opacity="0.18"/>
+  <ellipse cx="190" cy="186" rx="40" ry="6" fill="#fff" opacity="0.25"/>
+
+  <!-- شارة ؟ -->
+  <circle cx="404" cy="122" r="58" fill="#151229" opacity="0.25" transform="translate(4 8)"/>
+  <circle cx="404" cy="122" r="58" fill="url(#badge)"/>
+  <circle cx="404" cy="122" r="58" fill="none" stroke="#151229" stroke-width="7"/>
+  <g transform="translate(808 0) scale(-1 1)">
+    <path d="M384 106 Q384 82 404 82 Q426 82 426 102 Q426 118 406 126 L406 140" stroke="#151229" stroke-width="13" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="406" cy="160" r="8" fill="#151229"/>
+  </g>
+  <ellipse cx="386" cy="98" rx="16" ry="9" fill="#fff" opacity="0.5" transform="rotate(-30 386 98)"/>
 </svg>

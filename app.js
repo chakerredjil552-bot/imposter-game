@@ -47,11 +47,22 @@ function avColor(id){ let h = 0; for(const c of String(id)) h = (h * 31 + c.char
 
 // ---------- الكلمات ----------
 const CATS = RAW_CATEGORIES.map(c => ({ id: c.id, icon: c.icon, name: c.name.replace(" 🇩🇿", ""),
-  list: [...new Set(c.words.split("\n").map(s => s.trim()).filter(Boolean))] }));
+  base: [...new Set(c.words.split("\n").map(s => s.trim()).filter(Boolean))], list: [] }));
 const catById = id => CATS.find(c => c.id === id);
+// تعديلات المستعمل: كلمات زادها وكلمات نحّاها (تتسجل في الهاتف)
+let wordEdits = store.get("wordEdits", {});
+function catEdits(id){ return wordEdits[id] || (wordEdits[id] = { added: [], removed: [] }); }
+function applyEdits(){
+  for(const c of CATS){
+    const e = wordEdits[c.id] || { added: [], removed: [] };
+    c.list = [...new Set([...e.added, ...c.base.filter(w => !e.removed.includes(w))])];
+  }
+}
+applyEdits();
 function pickWord(catIds){
-  const pool = catIds.map(catById).filter(Boolean);
-  const cats = pool.length ? pool : CATS;
+  const pool = catIds.map(catById).filter(c => c && c.list.length);
+  const cats = pool.length ? pool : CATS.filter(c => c.list.length);
+  if(!cats.length) return null;
   // اختيار فئة حسب عدد كلماتها
   let total = cats.reduce((s, c) => s + c.list.length, 0), r = rnd(total), cat = cats[0];
   for(const c of cats){ if(r < c.list.length){ cat = c; break; } r -= c.list.length; }
@@ -180,7 +191,9 @@ document.querySelector('[data-allcats="pass"]').onclick = () => {
 };
 
 function passStart(){
-  const { cat, word } = pickWord(pcfg.cats);
+  const picked = pickWord(pcfg.cats);
+  if(!picked){ toast("الفئات اللي اخترتها فارغة — زيد كلمات ✏️"); return; }
+  const { cat, word } = picked;
   const players = Array.from({ length: pcfg.players }, (_, i) => pcfg.names[i] || ("اللاعب " + (i + 1)));
   pgame = { cat, word, players, imps: shuffle(players.map((_, i) => i)).slice(0, pcfg.imps), turn: 0 };
   $("passCat").textContent = catsLabel(pcfg.cats);
@@ -315,12 +328,14 @@ class HostRoom {
         // في اللوبي نحيه، وفي الجولة نخليه (يقدر يرجع)
         if(this.phase === "lobby"){ this.players = this.players.filter(x => x.id !== m.id); toast("🚪 " + p.name + " خرج"); }
         else p.online = false;
+        if(this.phase === "vote") this.checkVoteDone();
         this.sync();
       }
     } else if(m.t === "msg"){
       const d = m.d || {}, p = this.player(m.from);
       if(!p) return;
       if(d.a === "seen" && this.round && this.round.ids.includes(p.id) && !this.round.seen.includes(p.id)){ this.round.seen.push(p.id); this.sync(); }
+      if(d.a === "vote") this.castVote(p.id, d.target, d.no);
       if(d.a === "bye"){ this.players = this.players.filter(x => x.id !== p.id); if(this.round) this.round.ids = this.round.ids.filter(x => x !== p.id); this.sync(); }
     }
   }
@@ -329,8 +344,52 @@ class HostRoom {
   kick(id){
     const p = this.player(id); if(!p || p.host) return;
     this.players = this.players.filter(x => x.id !== id);
-    if(this.round) this.round.ids = this.round.ids.filter(x => x !== id);
+    if(this.round){
+      this.round.ids = this.round.ids.filter(x => x !== id);
+      if(this.round.votes){ delete this.round.votes[id]; for(const v in this.round.votes) if(this.round.votes[v] === id) delete this.round.votes[v]; }
+    }
     net.send({ t: "kick", id });
+    if(this.phase === "vote") this.checkVoteDone();
+    this.sync();
+  }
+  // ----- التصويت -----
+  startVote(){
+    const r = this.round; if(!r) return;
+    r.votes = {}; r.voteNo = (r.voteNo || 0) + 1; r.result = null;
+    this.phase = "vote";
+    this.sync();
+  }
+  castVote(voter, targetIdx, voteNo){
+    const r = this.round;
+    if(this.phase !== "vote" || !r || voteNo !== r.voteNo) return;
+    if(!r.ids.includes(voter) || r.votes[voter]) return;            // صوت واحد برك
+    const target = r.ids[targetIdx];
+    if(!target || target === voter) return;                          // ما تصوتش على روحك
+    r.votes[voter] = target;
+    this.checkVoteDone();
+    this.sync();
+  }
+  voters(){ const r = this.round; return r.ids.filter(id => { const p = this.player(id); return p && p.online; }); }
+  checkVoteDone(){
+    const r = this.round;
+    if(this.phase !== "vote" || !r) return;
+    const need = this.voters();
+    if(need.length && need.every(id => r.votes[id])) this.finishVote();
+  }
+  finishVote(){
+    const r = this.round;
+    const counts = r.ids.map(id => Object.values(r.votes).filter(t => t === id).length);
+    const max = Math.max(0, ...counts);
+    const tops = r.ids.filter((_, i) => counts[i] === max && max > 0);
+    if(tops.length !== 1){
+      // تعادل: يكملو الأسئلة ويعاودو يصوتو
+      r.tie = { no: r.voteNo, counts };
+      this.phase = "first";
+    } else {
+      r.tie = null;
+      r.result = { winner: r.imps.includes(tops[0]) ? "players" : "imposter", top: tops[0], counts, votes: { ...r.votes } };
+      this.phase = "reveal";
+    }
     this.sync();
   }
   start(){
@@ -338,12 +397,14 @@ class HostRoom {
     if(ids.length < 3){ toast("لازم 3 لاعبين على الأقل"); return; }
     if(!this.settings.cats.length){ toast("اختار فئة وحدة على الأقل"); return; }
     const imps = Math.min(this.settings.imps, this.maxImps(ids.length));
-    const { cat, word } = pickWord(this.settings.cats);
+    const picked = pickWord(this.settings.cats);
+    if(!picked){ toast("الفئات اللي اخترتها فارغة — زيد كلمات ✏️"); return; }
+    const { cat, word } = picked;
     this.round = { no: (this.round ? this.round.no : 0) + 1, ids, imps: shuffle(ids).slice(0, imps), word, cat: cat.id, seen: [], first: null };
     this.phase = "card";
     this.sync();
   }
-  pickFirst(){ this.round.first = this.round.ids[rnd(this.round.ids.length)]; this.phase = "first"; this.sync(); }
+  pickFirst(){ this.round.first = this.round.ids[rnd(this.round.ids.length)]; this.round.tie = null; this.phase = "first"; this.sync(); }
   reveal(){ this.phase = "reveal"; this.sync(); }
   toLobby(){
     this.phase = "lobby";
@@ -366,7 +427,15 @@ class HostRoom {
         names: r.ids.map(id => (this.player(id) || {}).name || "؟"),
         firstIdx: r.first ? r.ids.indexOf(r.first) : -1,
         me: inRound ? { isImp: r.imps.includes(pid), word: r.imps.includes(pid) ? null : r.word, catName: cat.name, hint: this.settings.hint } : null,
-        reveal: this.phase === "reveal" ? { imps: r.imps.map(id => (this.player(id) || {}).name || "؟"), word: r.word } : null
+        reveal: this.phase === "reveal" ? { imps: r.imps.map(id => (this.player(id) || {}).name || "؟"), word: r.word,
+          impIdx: r.imps.map(id => r.ids.indexOf(id)),
+          result: r.result ? { winner: r.result.winner, topIdx: r.ids.indexOf(r.result.top), counts: r.result.counts,
+            myVoteIdx: r.result.votes[pid] ? r.ids.indexOf(r.result.votes[pid]) : -1 } : null } : null,
+        // عدد الأصوات على كل لاعب يبان للجميع وقت التصويت
+        vote: this.phase === "vote" ? { no: r.voteNo, counts: r.ids.map(id => Object.values(r.votes).filter(t => t === id).length),
+          voted: Object.keys(r.votes).length, total: this.voters().length,
+          myVote: r.votes[pid] ? r.ids.indexOf(r.votes[pid]) : -1, myIdx: r.ids.indexOf(pid) } : null,
+        tie: this.phase === "first" && r.tie ? r.tie : null
       };
     }
     return s;
@@ -511,7 +580,7 @@ function onState(s){
   document.querySelectorAll("#s-w-room .view").forEach(v => v.classList.toggle("on", v.id === "v-" + view));
 
   if(view === "lobby") renderLobby(s, prev);
-  if(view === "card" || view === "first" || view === "reveal") renderRound(s);
+  if(view === "card" || view === "first" || view === "reveal" || view === "vote") renderRound(s);
 }
 function renderLobby(s){
   $("wCodeBox").classList.toggle("hidden", !isHost || !s.ips.length);
@@ -568,10 +637,11 @@ function renderRound(s){
     if(spunRound !== r.no){
       spunRound = r.no;
       if(s.phase === "first"){
-        $("wReveal").classList.add("hidden");
+        // الأزرار تبان كي يحبس الدوران
+        $("v-first").classList.add("spinning");
         spinTo($("wSpin"), r.names, r.firstIdx, () => {
           $("wRule").classList.remove("hidden");
-          if(isHost) setTimeout(() => $("wReveal").classList.remove("hidden"), 400);
+          setTimeout(() => $("v-first").classList.remove("spinning"), 400);
         });
       }
     }
@@ -579,13 +649,42 @@ function renderRound(s){
       $("wSpin").textContent = "🎤 " + r.names[r.firstIdx]; $("wRule").classList.remove("hidden");
     }
   }
+  // تعادل في التصويت: نكملو الأسئلة
+  const tieBox = $("wTie");
+  if(s.phase === "first" && r.tie){
+    tieBox.classList.remove("hidden");
+    if(tieBox.dataset.no !== String(r.tie.no)){
+      tieBox.dataset.no = r.tie.no;
+      const parts = r.names.map((n, i) => ({ n, c: r.tie.counts[i] })).filter(x => x.c > 0).sort((a, b) => b.c - a.c);
+      tieBox.innerHTML = `⚖️ تعادل! كمّلو الأسئلة وعاودو صوّتو<div class="tl">${parts.length ? parts.map(x => esc(x.n) + ": " + x.c).join(" • ") : "حتى واحد ما صوّت"}</div>`;
+      vibe([30, 50, 30]);
+    }
+  } else tieBox.classList.add("hidden");
+  $("wVote").textContent = r.tie ? "🗳️ عاودو التصويت" : "🗳️ تصويت: شكون المحتال؟";
+
+  if(s.phase === "vote" && r.vote) renderVote(r);
+
   if(s.phase === "reveal" && r.reveal){
     const box = $("wRevealBox");
     if(box.dataset.no !== String(r.no)){
       box.dataset.no = r.no;
-      box.innerHTML = revealHTML(r.reveal.imps, r.reveal.word) +
+      const res = r.reveal.result;
+      let head = "";
+      if(res){
+        const crewWon = res.winner === "players";
+        const iWon = r.me.isImp ? !crewWon : crewWon;
+        head = `<div class="winner ${crewWon ? "good" : "bad"} pop">${crewWon ? "🎉 فاز اللاعبين! المحتال انكشف" : "😈 فاز المحتال!"}</div>
+          <div class="mine pop" style="animation-delay:.1s">${iWon ? "✅ ربحت!" : "❌ خسرت"}${!r.me.isImp && res.myVoteIdx >= 0 ? (r.reveal.impIdx.includes(res.myVoteIdx) ? " — صوتك كان صحيح" : " — صوتك كان غالط") : ""}</div>`;
+      }
+      let tally = "";
+      if(res){
+        const rows = r.names.map((n, i) => ({ n, c: res.counts[i], imp: r.reveal.impIdx.includes(i) })).sort((a, b) => b.c - a.c);
+        tally = `<div class="tally pop" style="animation-delay:.5s">${rows.map(x => `<div class="${x.imp ? "imp" : ""}"><span>${x.imp ? "🎭 " : ""}${esc(x.n)}</span><span>${x.c} 🗳️</span></div>`).join("")}</div>`;
+      }
+      box.innerHTML = head + revealHTML(r.reveal.imps, r.reveal.word) + tally +
         `<div class="small">${r.me.isImp ? "كنت أنت المحتال! 😈" : "الكلمة تاعك كانت: " + esc(r.me.word)}</div>`;
-      confetti(); vibe([40, 60, 40]);
+      if(!res || (res.winner === "players") !== !!r.me.isImp) confetti();
+      vibe([40, 60, 40]);
     }
   }
 }
@@ -607,9 +706,111 @@ $("wFirst").onclick = async () => {
   room.pickFirst();
 };
 $("wReveal").onclick = async () => { if(room && await ask("متأكدين؟ رايح يبان المحتال والكلمة عند الكل.")) room.reveal(); };
+
+// ----- شاشة التصويت -----
+let votePick = -1, voteShownNo = 0;
+function renderVote(r){
+  const v = r.vote;
+  if(voteShownNo !== v.no){ voteShownNo = v.no; votePick = -1; $("wVoteList").dataset.key = ""; vibe([20, 40, 20]); }
+  const locked = v.myVote >= 0;
+  const max = Math.max(1, ...v.counts);
+  const top = Math.max(...v.counts);
+  const list = $("wVoteList");
+  const key = r.names.join("|");
+  if(list.dataset.key !== key){
+    list.dataset.key = key;
+    list.innerHTML = r.names.map((n, i) => `<button class="vopt ${i === v.myIdx ? "me" : ""}" data-i="${i}" style="animation-delay:${i * 0.05}s">
+      <span class="bar"></span><span class="av" style="background:${avColor(n + i)}">${esc(n.trim()[0] || "؟")}</span>
+      <span class="n">${esc(n)}${i === v.myIdx ? " (أنت)" : ""}</span><span class="vc">0</span></button>`).join("");
+    list.querySelectorAll(".vopt").forEach(b => b.onclick = () => {
+      if(lastState.round.vote.myVote >= 0) return;
+      votePick = +b.dataset.i; vibe(10); renderVote(lastState.round);
+    });
+  }
+  list.classList.toggle("locked", locked);
+  list.querySelectorAll(".vopt").forEach(b => {
+    const i = +b.dataset.i, c = v.counts[i], vc = b.querySelector(".vc");
+    if(vc.textContent !== String(c)){ vc.textContent = c; vc.classList.remove("bump"); void vc.offsetWidth; vc.classList.add("bump"); }
+    b.querySelector(".bar").style.width = (c / max * 100) + "%";
+    b.classList.toggle("sel", locked ? i === v.myVote : i === votePick);
+    b.classList.toggle("top", c > 0 && c === top);
+  });
+  $("wVoted").textContent = `🗳️ صوّتو: ${v.voted} / ${v.total}`;
+  $("wVoteInfo").textContent = locked ? `✔ صوّتت على ${r.names[v.myVote]} — نستناو الباقي…` : "اختار اللاعب اللي تشك فيه، ومن بعد أكّد صوتك";
+  $("wVoteOk").disabled = locked || votePick < 0;
+  $("wVoteOk").textContent = locked ? "✔ تم التصويت" : votePick >= 0 ? `تأكيد: ${r.names[votePick]} ✔` : "اختار لاعب باش تصوّت";
+}
+$("wVoteOk").onclick = async () => {
+  const r = lastState && lastState.round;
+  if(!r || !r.vote || votePick < 0 || r.vote.myVote >= 0) return;
+  if(!await ask(`تأكّد صوتك على ${r.names[votePick]}؟ ما تقدرش تبدلو من بعد.`)) return;
+  const msg = { a: "vote", target: votePick, no: r.vote.no };
+  if(isHost) room.castVote(myId, msg.target, msg.no);
+  else net && net.send({ d: msg });
+  vibe(30);
+};
+$("wVote").onclick = () => room && room.startVote();
+$("wVoteEnd").onclick = async () => { if(room && await ask("تختم التصويت بالأصوات اللي كاينة؟")) room.finishVote(); };
 $("wAgain").onclick = () => room && room.start();
 $("wLobby").onclick = () => room && room.toLobby();
 document.querySelector('[data-allcats="wifi"]').onclick = () => room && room.setSettings(st => st.cats = st.cats.length === CATS.length ? [] : CATS.map(c => c.id));
+
+// ============================================================
+//   تعديل الكلمات
+// ============================================================
+let editCat = null;
+function saveEdits(){
+  for(const k in wordEdits) if(!wordEdits[k].added.length && !wordEdits[k].removed.length) delete wordEdits[k];
+  store.set("wordEdits", wordEdits); applyEdits();
+}
+function renderWordCats(){
+  $("wcats").innerHTML = CATS.map(c => {
+    const e = wordEdits[c.id];
+    const tag = e ? `<span class="ed">${e.added.length ? "+" + e.added.length : ""}${e.added.length && e.removed.length ? " / " : ""}${e.removed.length ? "−" + e.removed.length : ""}</span>` : "";
+    return `<button class="wcat" data-id="${c.id}"><span class="ic">${c.icon}</span><span class="nm">${esc(c.name)}</span>${tag}<span class="ct">${c.list.length} كلمة</span></button>`;
+  }).join("");
+  $("wcats").querySelectorAll(".wcat").forEach(b => b.onclick = () => openWordCat(b.dataset.id));
+}
+function openWordCat(id){
+  editCat = catById(id);
+  $("wcTitle").textContent = editCat.icon + " " + editCat.name;
+  $("wcNew").value = ""; $("wcSearch").value = "";
+  renderWordList(); show("s-words-cat");
+}
+function renderWordList(){
+  const c = editCat, e = wordEdits[c.id] || { added: [], removed: [] };
+  const q = $("wcSearch").value.trim();
+  const words = c.list.filter(w => !q || w.includes(q));
+  $("wcCount").textContent = c.list.length;
+  $("wcList").innerHTML = words.length ? words.map(w => `<div class="wrow"><span class="w">${esc(w)}</span>${e.added.includes(w) ? `<span class="new">جديدة</span>` : ""}<button class="del" data-w="${esc(w)}" aria-label="نحّي">✕</button></div>`).join("")
+    : `<div class="small" style="text-align:center;padding:16px">${q ? "ما لقينا حتى كلمة" : "الفئة فارغة — زيد كلمات!"}</div>`;
+  $("wcList").querySelectorAll(".del").forEach(b => b.onclick = () => {
+    const w = b.dataset.w, ed = catEdits(c.id);
+    if(ed.added.includes(w)) ed.added = ed.added.filter(x => x !== w); else ed.removed.push(w);
+    b.parentElement.classList.add("out"); vibe(10);
+    setTimeout(() => { saveEdits(); renderWordList(); }, 220);
+  });
+  $("wcReset").classList.toggle("hidden", !wordEdits[c.id]);
+}
+function addWord(){
+  const w = $("wcNew").value.trim().replace(/\s+/g, " ");
+  if(!w) return;
+  const c = editCat, ed = catEdits(c.id);
+  if(c.list.includes(w)){ toast("الكلمة موجودة ✔"); return; }
+  if(ed.removed.includes(w)) ed.removed = ed.removed.filter(x => x !== w);   // كانت أصلية ونحّيناها
+  else ed.added.unshift(w);
+  saveEdits(); $("wcNew").value = ""; $("wcNew").focus();
+  toast("✅ تزادت: " + w); vibe(15); renderWordList();
+}
+$("goWords").onclick = () => { renderWordCats(); show("s-words"); };
+$("wordsBack").onclick = () => { renderWordCats(); show("s-words"); };
+$("wcAdd").onclick = addWord;
+$("wcNew").onkeydown = e => { if(e.key === "Enter") addWord(); };
+$("wcSearch").oninput = renderWordList;
+$("wcReset").onclick = async () => {
+  if(!await ask(`ترجّع الكلمات الأصلية تاع "${editCat.name}"؟ الكلمات اللي زدتها رايحين يتحاو.`)) return;
+  delete wordEdits[editCat.id]; saveEdits(); renderWordList(); toast("↩️ رجعت الكلمات الأصلية");
+};
 
 // زر الرجوع في أندرويد
 if(APP){
@@ -618,6 +819,7 @@ if(APP){
     const on = document.querySelector(".screen.on");
     if(!on || on.id === "s-home") APP.exitApp();
     else if(on.id === "s-w-find") document.querySelector("[data-wback]").click();
+    else if(on.id === "s-words-cat") $("wordsBack").click();
     else if(on.id === "s-w-room") $("wLeave").click();
     else if(on.id.startsWith("s-pass") && on.id !== "s-pass-setup") document.querySelector("[data-quit-pass]").click();
     else show("s-home");

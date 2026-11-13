@@ -58,7 +58,33 @@
     <span class="mi">📱</span>
     <span><b>هاتف واحد</b><small>تمرّرو الهاتف بيناتكم</small></span>
   </button>
+  <button class="mode alt slim" id="goWords">
+    <span class="mi">✏️</span>
+    <span><b>تعديل الكلمات</b><small>زيد كلماتك ولا نحّي اللي ما عجبوكش</small></span>
+  </button>
   <div class="foot">صُنع بواسطة <b>Chaker Red</b></div>
+</section>
+
+<!-- ===== تعديل الكلمات: الفئات ===== -->
+<section class="screen" id="s-words">
+  <div class="top"><button class="x" data-home>➜</button><span class="chip">✏️ تعديل الكلمات</span><span class="sp"></span></div>
+  <div class="small info-box">اختار فئة باش تزيد ولا تنحّي كلمات. التعديلات تتسجل في هاتفك.<br>👑 في اللعب مع الصحاب، الكلمات تاع <b>القائد</b> هي اللي تُستعمل.</div>
+  <div class="wcats" id="wcats"></div>
+</section>
+
+<!-- ===== تعديل الكلمات: فئة وحدة ===== -->
+<section class="screen" id="s-words-cat">
+  <div class="top"><button class="x" id="wordsBack">➜</button><span class="chip" id="wcTitle"></span><span class="count" id="wcCount"></span></div>
+  <div class="panel">
+    <div class="label">➕ زيد كلمة</div>
+    <div class="row" style="margin-top:8px">
+      <input class="field" id="wcNew" maxlength="30" placeholder="اكتب الكلمة هنا">
+      <button class="btn small-btn" id="wcAdd">زيد</button>
+    </div>
+  </div>
+  <input class="field search" id="wcSearch" placeholder="🔎 قلّب على كلمة">
+  <div class="wlist" id="wcList"></div>
+  <div class="sticky"><button class="btn ghost hidden" id="wcReset">↩️ رجّع الكلمات الأصلية</button></div>
 </section>
 
 <!-- ===== هاتف واحد: الإعدادات ===== -->
@@ -195,6 +221,7 @@
 
   <!-- من يبدأ -->
   <div id="v-first" class="view">
+    <div class="tie hidden" id="wTie"></div>
     <div class="center">
       <div class="small">أول واحد يشرح كلمتو</div>
       <div class="spin" id="wSpin"></div>
@@ -203,8 +230,23 @@
       <div class="peek-box hidden" id="wPeekBox"></div>
     </div>
     <div class="sticky">
-      <button class="btn red host-only" id="wReveal">انتهينا — اكشف المحتال 🔍</button>
-      <div class="wait guest-only">تناقشو… القائد هو اللي يكشف المحتال</div>
+      <button class="btn host-only" id="wVote">🗳️ تصويت: شكون المحتال؟</button>
+      <button class="btn ghost host-only" id="wReveal">اكشف المحتال بلا تصويت 🔍</button>
+      <div class="wait guest-only">تناقشو… القائد رايح يفتح التصويت 🗳️</div>
+    </div>
+  </div>
+
+  <!-- التصويت -->
+  <div id="v-vote" class="view">
+    <div class="vote-head">
+      <div class="big">🗳️ شكون المحتال؟</div>
+      <div class="small" id="wVoteInfo">اختار اللاعب اللي تشك فيه، ومن بعد أكّد صوتك</div>
+    </div>
+    <div class="vlist" id="wVoteList"></div>
+    <div class="seen" id="wVoted"></div>
+    <div class="sticky">
+      <button class="btn" id="wVoteOk" disabled>تأكيد التصويت ✔</button>
+      <button class="btn ghost host-only" id="wVoteEnd">إنهاء التصويت الآن ⏱️</button>
     </div>
   </div>
 

@@ -1,5 +1,5 @@
 ﻿// يخلي الموقع يخدم بلا إنترنت (وضع الهاتف الواحد)
-const CACHE = "mohtal-v1";
+const CACHE = "mohtal-v2";
 const FILES = ["./", "./index.html", "./style.css", "./app.js", "./words.js", "./words2.js", "./words3.js", "./qrcode.js", "./capacitor.js", "./config.js", "./icon.svg", "./icon-512.png", "./manifest.json", "./cairo-arabic.woff2", "./cairo-latin.woff2"];
 self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))); });
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))));
