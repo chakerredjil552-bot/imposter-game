@@ -124,8 +124,17 @@ h1 span,.title-xl span{color:var(--accent)}
 
 .spin{font-size:36px;font-weight:900;min-height:58px;color:var(--accent)}
 .rule{max-width:320px}
-.peek{color:var(--muted);font-weight:700;border:1px solid var(--line);border-radius:30px;padding:8px 18px;background:var(--bg2)}
-.peek-box{background:linear-gradient(160deg,#fff8e1,#ffe6a3);color:#1a1530;border-radius:18px;padding:14px 22px;font-weight:900;font-size:22px;animation:pop .4s var(--ease-back)}
+.peek{color:var(--text);font-weight:800;border:1px solid var(--line);border-radius:30px;padding:12px 22px;background:var(--bg2);align-self:center;touch-action:none;-webkit-touch-callout:none;transition:transform .15s,background .2s}
+.peek.holding{transform:scale(.94);background:var(--card)}
+/* نافذة كلمتي وقت الضغط */
+.peek-pop{position:fixed;inset:0;z-index:25;display:flex;align-items:center;justify-content:center;background:#0008;pointer-events:none;animation:fade .12s}
+.peek-card{width:min(78vw,320px);aspect-ratio:3/4;border-radius:26px;background:linear-gradient(160deg,#fff8e1,#ffe6a3);color:#1a1530;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;text-align:center;box-shadow:0 18px 40px #000a;animation:pop .25s var(--ease-back)}
+.peek-card .cat-l{font-size:14px;font-weight:800;color:#7a6a3a;background:#0000000f;padding:4px 12px;border-radius:20px}
+.peek-card .word{font-size:clamp(26px,8.5vw,42px);font-weight:900;line-height:1.25}
+.peek-card .hint{font-size:13px;color:#6b5f3f;font-weight:700}
+/* الضغط المطوّل على البطاقة */
+.flip{touch-action:none;-webkit-touch-callout:none}
+.flip .in{transition:transform .32s var(--ease-out)}
 
 .reveal-card{background:var(--bg2);border:1px solid var(--line);border-radius:22px;padding:20px;width:100%}
 .reveal-card .k{color:var(--muted);font-size:15px;font-weight:700}

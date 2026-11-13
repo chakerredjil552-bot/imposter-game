@@ -209,7 +209,7 @@
   <!-- البطاقة -->
   <div id="v-card" class="view">
     <div class="center">
-      <div class="small" id="wCardTop">اضغط على البطاقة باش تشوف كلمتك</div>
+      <div class="small" id="wCardTop">اضغط مطوّل على البطاقة باش تشوف كلمتك — كي تسيّب تتخبّى</div>
       <div class="flip" id="wFlip"></div>
       <div class="seen" id="wSeen"></div>
     </div>
@@ -226,8 +226,7 @@
       <div class="small">أول واحد يشرح كلمتو</div>
       <div class="spin" id="wSpin"></div>
       <div class="small rule hidden" id="wRule">كل واحد يقول كلمة وحدة على كلمتو بلا ما يفضحها،<br>ومن بعد تناقشو وتصوتو على المحتال.</div>
-      <button class="peek" id="wPeek">👁️ شوف كلمتي</button>
-      <div class="peek-box hidden" id="wPeekBox"></div>
+      <button class="peek" data-peek>👁️ اضغط مطوّل باش تشوف كلمتك</button>
     </div>
     <div class="sticky">
       <button class="btn host-only" id="wVote">🗳️ تصويت: شكون المحتال؟</button>
@@ -244,6 +243,7 @@
     </div>
     <div class="vlist" id="wVoteList"></div>
     <div class="seen" id="wVoted"></div>
+    <button class="peek" data-peek>👁️ اضغط مطوّل باش تشوف كلمتك</button>
     <div class="sticky">
       <button class="btn" id="wVoteOk" disabled>تأكيد التصويت ✔</button>
       <button class="btn ghost host-only" id="wVoteEnd">إنهاء التصويت الآن ⏱️</button>
@@ -272,6 +272,8 @@
 
 </div>
 
+<!-- كلمتي: تبان غير وقت الضغط المطوّل -->
+<div class="peek-pop hidden" id="peekPop"><div class="peek-card"><div class="cat-l" id="peekCat"></div><div class="word" id="peekWord"></div><div class="hint">سيّب صبعك باش تخبّيها</div></div></div>
 <div class="modal hidden" id="modal"><div class="mbox"><div id="mText"></div><div class="mbtns"><button class="btn red" id="mYes">إيه</button><button class="btn ghost" id="mNo">لا</button></div></div></div>
 <div class="toast" id="toast"></div>
 <div class="confetti" id="confetti"></div>

@@ -85,7 +85,24 @@ function renderCatGrid(el, selected, onToggle){
 }
 
 // ---------- البطاقة (نفس الشكل للجميع) ----------
-function cardHTML(){ return `<div class="in"><div class="face front"><div class="q">؟</div><div class="tap">اضغط باش تشوف كلمتك</div></div><div class="face back"><div class="cat-l"></div><div class="word"></div><div class="hint"></div><div class="again"></div></div></div>`; }
+function cardHTML(){ return `<div class="in"><div class="face front"><div class="q">؟</div><div class="tap">اضغط مطوّل باش تشوف كلمتك 👆</div></div><div class="face back"><div class="cat-l"></div><div class="word"></div><div class="hint"></div><div class="again">سيّب صبعك باش تخبّيها</div></div></div>`; }
+
+// الضغط المطوّل: الكلمة تبان غير وقت الضغط، وكي تسيّب صبعك تتخبّى
+function holdToShow(el, onShow, onHide){
+  let down = false;
+  const start = e => {
+    if(e.button > 0) return;
+    e.preventDefault(); down = true;
+    try{ el.setPointerCapture(e.pointerId); }catch(_){}
+    vibe(15); onShow();
+  };
+  const end = () => { if(!down) return; down = false; onHide(); };
+  el.addEventListener("pointerdown", start);
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach(t => el.addEventListener(t, end));
+  el.addEventListener("contextmenu", e => e.preventDefault());
+  // لو التطبيق راح للخلفية وهو مضغوط
+  document.addEventListener("visibilitychange", () => { if(document.hidden) end(); });
+}
 function fillCard(el, {isImp, word, catName, hint, againText}){
   if(!el.firstChild) el.innerHTML = cardHTML();
   el.querySelector(".cat-l").textContent = "الفئة: " + (isImp && !hint ? "؟" : catName);
@@ -205,17 +222,16 @@ function passTurn(){
   $("passName").textContent = pgame.players[i];
   $("passHint").textContent = i === 0 ? "الهاتف عند" : "مرّر الهاتف إلى";
   $("dots").innerHTML = pgame.players.map((_, k) => `<i class="${k < i ? "done" : k === i ? "now" : ""}"></i>`).join("");
-  fillCard($("pFlip"), { isImp: pgame.imps.includes(i), word: pgame.word, catName: pgame.cat.name, hint: pcfg.hint });
+  fillCard($("pFlip"), { isImp: pgame.imps.includes(i), word: pgame.word, catName: pgame.cat.name, hint: pcfg.hint, againText: "سيّب صبعك باش تخبّيها" });
   $("pFlip").classList.remove("open");
   $("pNext").classList.add("hidden");
   $("pNext").textContent = i === pgame.players.length - 1 ? "فهمت، خبّي ✔" : "فهمت، خبّي ومرّر ⬅";
 }
 $("pStart").onclick = passStart;
-$("pFlip").onclick = () => {
-  if($("pFlip").classList.contains("open")) return;
-  $("pFlip").classList.add("open"); vibe(25);
-  setTimeout(() => $("pNext").classList.remove("hidden"), 380);
-};
+// هاتف واحد: اضغط مطوّل باش تشوف، وكي تسيّب يبان زر "مرّر"
+holdToShow($("pFlip"),
+  () => $("pFlip").classList.add("open"),
+  () => { $("pFlip").classList.remove("open"); $("pNext").classList.remove("hidden"); });
 $("pNext").onclick = () => {
   $("pFlip").classList.remove("open"); $("pNext").classList.add("hidden");
   setTimeout(() => { pgame.turn++; if(pgame.turn >= pgame.players.length) show("s-pass-ready"); else passTurn(); }, 400);
@@ -623,17 +639,18 @@ function renderRound(s){
   if(shownRound !== r.no){
     shownRound = r.no; seenSent = 0;
     $("wFlip").innerHTML = cardHTML(); $("wFlip").classList.remove("open");
-    $("wPeekBox").classList.add("hidden");
+    $("peekPop").classList.add("hidden");
     $("wSpin").textContent = ""; $("wRule").classList.add("hidden");
     if(s.phase === "card") vibe([20, 30, 20]);
   }
-  fillCard($("wFlip"), { ...r.me, againText: "اضغط مرة أخرى باش تخبيها" });
+  fillCard($("wFlip"), { ...r.me, againText: "سيّب صبعك باش تخبّيها" });
+  // كلمتي تبقى متاحة طول الجولة (ضغط مطوّل)
+  $("peekCat").textContent = "الفئة: " + (r.me.isImp && !r.me.hint ? "؟" : r.me.catName);
+  $("peekWord").textContent = r.me.isImp ? "أنت المحتال 🤫" : r.me.word;
   $("wSeen").textContent = `👀 شافو كلمتهم: ${r.seen} / ${r.count}`;
   $("wFirst").textContent = r.seen >= r.count ? "الكل شاف! شكون يبدأ؟ 🎲" : `شكون يبدأ؟ 🎲 (${r.seen}/${r.count} شافو)`;
 
   if(s.phase === "first" || s.phase === "reveal"){
-    const box = $("wPeekBox");
-    box.textContent = r.me.isImp ? "أنت المحتال 🤫" : r.me.word;
     if(spunRound !== r.no){
       spunRound = r.no;
       if(s.phase === "first"){
@@ -688,16 +705,19 @@ function renderRound(s){
     }
   }
 }
-$("wFlip").onclick = () => {
-  const f = $("wFlip");
-  f.classList.toggle("open"); vibe(20);
-  if(f.classList.contains("open") && seenSent !== shownRound && lastState && lastState.round){
+// أونلاين: اضغط مطوّل على البطاقة باش تشوف كلمتك
+holdToShow($("wFlip"), () => {
+  $("wFlip").classList.add("open");
+  if(seenSent !== shownRound && lastState && lastState.round){
     seenSent = shownRound;
     if(isHost) room.onServer({ t: "msg", from: myId, d: { a: "seen" } });
     else net && net.send({ d: { a: "seen" } });
   }
-};
-$("wPeek").onclick = () => $("wPeekBox").classList.toggle("hidden");
+}, () => $("wFlip").classList.remove("open"));
+// بعد البطاقة (النقاش والتصويت): زر "كلمتي" بالضغط المطوّل باش ما تنساهاش
+document.querySelectorAll("[data-peek]").forEach(b => holdToShow(b,
+  () => { b.classList.add("holding"); $("peekPop").classList.remove("hidden"); },
+  () => { b.classList.remove("holding"); $("peekPop").classList.add("hidden"); }));
 $("wStart").onclick = () => room && room.start();
 $("wFirst").onclick = async () => {
   if(!room) return;
