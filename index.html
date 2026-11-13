@@ -197,8 +197,13 @@
   <!-- اللوبي -->
   <div id="v-lobby" class="view">
     <div class="panel code-panel hidden" id="wCodeBox">
-      <div class="small">رمز الغرفة (لو صحابك ما لقاوهاش)</div>
-      <div class="code" id="wCode" dir="ltr"></div>
+      <div class="small">رمز الغرفة (اضغط عليه باش تنسخو)</div>
+      <button class="code copyable" id="wCode" dir="ltr"></button>
+      <div class="share-row" style="margin-top:10px">
+        <button class="btn small-btn" id="wInvite">📤 ابعث الدعوة</button>
+        <button class="btn ghost small-btn" id="wCopyCode">📋 نسخ الرمز</button>
+      </div>
+      <div class="small">الرابط يفتح التطبيق مباشرة في الغرفة، ولا المتصفح إذا ما عندوش التطبيق</div>
       <div class="web-join hidden" id="wWebBox">
         <div class="label">📱 صحابك اللي عندهم آيفون</div>
         <div class="small">يصوّرو هذا الكود بالكاميرا، ولا يفتحو الرابط في Safari</div>

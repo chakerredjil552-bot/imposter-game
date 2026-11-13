@@ -116,6 +116,11 @@ const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && windo
 const getPlugin = n => (window.Capacitor.registerPlugin ? window.Capacitor.registerPlugin(n) : window.Capacitor.Plugins[n]);
 const LN = NATIVE ? getPlugin("LocalNet") : null;
 const APP = NATIVE ? getPlugin("App") : null;
+const SHARE = NATIVE ? getPlugin("Share") : null;
+const CLIP = NATIVE ? getPlugin("Clipboard") : null;
+const SITE = "https://chakerredjil552-bot.github.io/imposter-game/";
+// رابط دعوة جا من برا (mohtal://join?r=IP)
+let pendingJoin = null;
 const PORT = 47800;            // منفذ الغرفة على الهاتف
 const TEST_PORT = 47801;       // خادم التجربة على الحاسوب
 const HTTP_PORT = 47880;       // صفحة اللعبة على هاتف القائد (للآيفون)
@@ -153,7 +158,36 @@ async function boot(){
 async function splash(){
   show("s-splash");
   await wait(1900);
-  if($("s-splash").classList.contains("on")) show("s-home");
+  if(!$("s-splash").classList.contains("on")) return;
+  if(pendingJoin) goPendingJoin(); else show("s-home");
+}
+// ----- روابط الدعوة -----
+function parseInvite(text){
+  const s = String(text || "");
+  const m = /[?&]r=([^&#\s]+)/.exec(s);
+  let r = m ? decodeURIComponent(m[1]) : s.trim();
+  r = r.replace(/\s/g, "");
+  if(!/^[\w.\-]+(:\d+)?$/.test(r)) return null;
+  const [ip, port] = r.split(":");
+  return { ip, port: +port || PORT };
+}
+function goPendingJoin(){
+  if(!pendingJoin) return;
+  if(net){ toast("راك في غرفة دوك — اخرج منها أولاً"); pendingJoin = null; return; }
+  openWifi();
+  if(store.get("myName", "")) $("wJoin").click();
+  else { $("wName").focus(); toast("اكتب اسمك ومن بعد اضغط ادخل للغرفة"); }
+}
+function handleInviteUrl(url){
+  const inv = parseInvite(url); if(!inv) return;
+  pendingJoin = inv;
+  // إذا اللعبة مفتوحة من قبل (ماشي في شاشة البداية) ندخلو مباشرة
+  const on = document.querySelector(".screen.on");
+  if(on && on.id !== "s-splash" && on.id !== "s-perm") goPendingJoin();
+}
+if(APP){
+  APP.addListener("appUrlOpen", e => handleInviteUrl(e && e.url));
+  APP.getLaunchUrl().then(r => { if(r && r.url) handleInviteUrl(r.url); }).catch(() => {});
 }
 document.querySelectorAll("[data-home]").forEach(b => b.onclick = () => show("s-home"));
 $("goPass").onclick = () => { renderPassSetup(); show("s-pass-setup"); };
@@ -162,7 +196,7 @@ function openWifi(){
   $("wHost").classList.toggle("hidden", !CAN_LEAD);
   $("wWebNote").classList.toggle("hidden", CAN_LEAD);
   $("wJoin").className = CAN_LEAD ? "btn ghost" : "btn";
-  $("wJoin").textContent = HOSTED ? "🚪 ادخل للغرفة" : "🔎 انضمام لغرفة";
+  $("wJoin").textContent = HOSTED || pendingJoin ? "🚪 ادخل للغرفة" : "🔎 انضمام لغرفة";
   show("s-w-name");
 }
 $("goWifi").onclick = openWifi;
@@ -280,6 +314,29 @@ let isHost = false;
 let lastState = null;
 let discovering = false;
 let webLinks = [];     // روابط صفحة الويب عند القائد (للآيفون)
+let httpPort = HTTP_PORT;
+// رابط الدعوة: يفتح التطبيق في الغرفة، ولا المتصفح
+function inviteLink(){
+  const s = lastState; if(!s || !s.ips.length) return null;
+  const host = s.players.find(p => p.host);
+  return `${SITE}join.html?r=${encodeURIComponent(s.ips[0])}${httpPort !== HTTP_PORT ? "&h=" + httpPort : ""}&n=${encodeURIComponent(host ? host.name : "")}`;
+}
+async function copyCode(){
+  const s = lastState; if(!s || !s.ips.length) return;
+  toast(await copyText(s.ips[0]) ? "📋 تنسخ الرمز: " + s.ips[0] : "ما قدرناش ننسخو");
+  vibe(15);
+}
+async function sendInvite(){
+  const link = inviteLink(); if(!link){ toast("شعّل الواي فاي ولا نقطة الاتصال أولاً"); return; }
+  const code = lastState.ips[0];
+  const text = `تعال نلعبو شكون المحتال؟ 🕵️\nادخل للغرفة من هنا 👇\n${link}\n\nولا اكتب رمز الغرفة: ${code}\n(لازم تكون في نفس الواي فاي)`;
+  if(SHARE){
+    try{ await SHARE.share({ title: "شكون المحتال؟", text, dialogTitle: "ابعث الدعوة لصحابك" }); return; }catch(e){ if(String(e && e.message).match(/cancel/i)) return; }
+  } else if(navigator.share){
+    try{ await navigator.share({ title: "شكون المحتال؟", text }); return; }catch(e){ if(e && e.name === "AbortError") return; }
+  }
+  toast(await copyText(text) ? "📋 تنسخت الدعوة — الصقها في أي محادثة" : "ما قدرناش ننسخو");
+}
 
 function myName(){ return ($("wName").value || "").trim(); }
 function needName(){
@@ -479,11 +536,13 @@ $("wHost").onclick = async () => {
       const port = r.port || PORT;
       ips = (r.ips || []).map(ip => port === PORT ? ip : ip + ":" + port);
       webLinks = r.httpPort > 0 ? (r.ips || []).map(ip => `http://${ip}:${r.httpPort}`) : [];
+      httpPort = r.httpPort > 0 ? r.httpPort : HTTP_PORT;
       url = `ws://127.0.0.1:${port}/?role=host&id=${myId}&name=${encodeURIComponent(name)}`;
     } else {
       url = `ws://${location.hostname || "localhost"}:${TEST_PORT}/?role=host&id=${myId}&name=${encodeURIComponent(name)}`;
       ips = [location.hostname || "localhost"];
       webLinks = [`http://${location.host}/`];
+      httpPort = +location.port || 80;
     }
     if(LN && !ips.length) toast("⚠️ شعّل الواي فاي ولا نقطة الاتصال باش صحابك يدخلو");
     isHost = true; room = new HostRoom(name); room.ips = ips;
@@ -508,6 +567,8 @@ $("wJoin").onclick = async () => {
   if(!needName()) return;
   // الصفحة جات من هاتف القائد: ندخلو مباشرة
   if(HOSTED){ joinRoom(location.hostname, window.ROOM_WS_PORT); return; }
+  // جاي من رابط دعوة: الرمز واجد
+  if(pendingJoin){ const p = pendingJoin; pendingJoin = null; joinRoom(p.ip, p.port); return; }
   foundRooms.clear();
   // في الموقع (GitHub) ما نقدروش نقلبو على الغرف، غير بالرمز
   $("wSearching").classList.toggle("hidden", !NATIVE);
@@ -530,9 +591,11 @@ if(LN){
 function stopDiscovery(){ if(LN && discovering){ discovering = false; LN.stopDiscovery().catch(() => {}); } }
 document.querySelector("[data-wback]").onclick = () => { stopDiscovery(); show("s-w-name"); };
 $("wIpGo").onclick = () => {
-  const v = $("wIp").value.trim().replace(/\s/g, "");
-  if(!/^[\w.\-]+(:\d+)?$/.test(v)){ toast("الرمز ماشي صحيح"); return; }
-  const [ip, port] = v.split(":");
+  // يقبل الرمز ولا رابط الدعوة كامل
+  const inv = parseInvite($("wIp").value.trim());
+  if(!inv){ toast("الرمز ماشي صحيح"); return; }
+  const v = inv.ip + (inv.port !== PORT ? ":" + inv.port : "");
+  const ip = inv.ip, port = inv.port !== PORT ? inv.port : 0;
   store.set("lastIp", v);
   if(!NATIVE){
     // من المتصفح: نروحو لصفحة اللعبة اللي على هاتف القائد
@@ -770,6 +833,9 @@ $("wVoteOk").onclick = async () => {
   vibe(30);
 };
 $("wVote").onclick = () => room && room.startVote();
+$("wCode").onclick = copyCode;
+$("wCopyCode").onclick = copyCode;
+$("wInvite").onclick = sendInvite;
 $("wVoteEnd").onclick = async () => { if(room && await ask("تختم التصويت بالأصوات اللي كاينة؟")) room.finishVote(); };
 $("wAgain").onclick = () => room && room.start();
 $("wLobby").onclick = () => room && room.toLobby();
@@ -883,6 +949,7 @@ function shareText(obj, label){
   return `شكون المحتال؟ ✏️ ${label} (${total} كلمة)\nافتح اللعبة ← تعديل الكلمات ← 📥 كلمات صاحبي، والصق هذا:\n#MOHTAL1#${encodeWords(obj)}`;
 }
 async function copyText(t){
+  if(CLIP){ try{ await CLIP.write({ string: t }); return true; }catch(e){} }
   try{ await navigator.clipboard.writeText(t); return true; }catch(e){}
   try{ const ta = $("shText"); ta.focus(); ta.select(); return document.execCommand("copy"); }catch(e){ return false; }
 }
