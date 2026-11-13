@@ -139,10 +139,8 @@ async function boot(){
   if(!NATIVE) store.set("onboarded", true);
   // جاي من رابط القائد: نروحو مباشرة للدخول
   if(HOSTED){
-    if(PARAMS.get("name")) store.set("myName", PARAMS.get("name").slice(0, 14));
     show("s-splash"); await wait(1400);
-    openWifi();
-    if(store.get("myName", "")) $("wJoin").click();
+    ensureProfile(() => { openWifi(); $("wJoin").click(); });
     return;
   }
   if(!store.get("onboarded", false)){
@@ -151,10 +149,53 @@ async function boot(){
       $("btnPerm").disabled = true;
       try{ if(LN) await LN.requestPerms(); }catch(e){}
       store.set("onboarded", true);
-      splash();
+      ensureProfile(splash);
     };
-  } else splash();
+  } else ensureProfile(splash);
 }
+
+// ----- الملف الشخصي: الاسم واللقب (مرة وحدة، ومن بعد يتبدل من القائمة) -----
+let profile = store.get("profile", null);
+const hasProfile = () => !!(profile && profile.name && profile.nick);
+let profileAfter = null;
+function showProfile(first, after){
+  profileAfter = after || null;
+  $("pfName").value = profile ? profile.name : "";
+  $("pfNick").value = profile ? profile.nick : "";
+  $("pfTitle").textContent = first ? "عرّفنا بيك 👋" : "✏️ بدّل اسمك";
+  $("pfSave").textContent = first ? "يلا نبداو ✔" : "حفظ ✔";
+  $("pfBack").classList.toggle("hidden", first);
+  updateNickPreview();
+  show("s-profile");
+}
+function ensureProfile(next){ if(hasProfile()) next(); else showProfile(true, next); }
+function updateNickPreview(){
+  const n = $("pfNick").value.trim();
+  $("pfPreview").textContent = (n || "لقبك") + (n ? "" : "");
+  $("pfAv").textContent = (n || $("pfName").value.trim() || "؟")[0];
+  $("pfAv").style.background = avColor(myId);
+}
+$("pfNick").oninput = updateNickPreview;
+$("pfName").oninput = updateNickPreview;
+$("pfSave").onclick = () => {
+  const name = $("pfName").value.trim().replace(/\s+/g, " ");
+  const nick = $("pfNick").value.trim().replace(/\s+/g, " ");
+  if(name.length < 2){ toast("اكتب اسمك ✍️"); $("pfName").focus(); return; }
+  if(nick.length < 2){ toast("اختار لقب باش يعرفوك صحابك 😎"); $("pfNick").focus(); return; }
+  profile = { name, nick };
+  store.set("profile", profile); store.set("myName", nick);
+  renderHomeProfile(); vibe(20);
+  const next = profileAfter; profileAfter = null;
+  if(next) next(); else { toast("✅ تسجل"); show("s-home"); }
+};
+$("pfBack").onclick = () => show("s-home");
+function renderHomeProfile(){
+  if(!hasProfile()) return;
+  $("homeNick").textContent = profile.nick;
+  $("homeAv").textContent = profile.nick[0];
+  $("homeAv").style.background = avColor(myId);
+}
+$("homeProfile").onclick = () => showProfile(false);
 async function splash(){
   show("s-splash");
   await wait(1900);
@@ -174,9 +215,7 @@ function parseInvite(text){
 function goPendingJoin(){
   if(!pendingJoin) return;
   if(net){ toast("راك في غرفة دوك — اخرج منها أولاً"); pendingJoin = null; return; }
-  openWifi();
-  if(store.get("myName", "")) $("wJoin").click();
-  else { $("wName").focus(); toast("اكتب اسمك ومن بعد اضغط ادخل للغرفة"); }
+  ensureProfile(() => { openWifi(); $("wJoin").click(); });
 }
 function handleInviteUrl(url){
   const inv = parseInvite(url); if(!inv) return;
@@ -192,7 +231,9 @@ if(APP){
 document.querySelectorAll("[data-home]").forEach(b => b.onclick = () => show("s-home"));
 $("goPass").onclick = () => { renderPassSetup(); show("s-pass-setup"); };
 function openWifi(){
-  $("wName").value = store.get("myName", "");
+  if(!hasProfile()){ showProfile(true, openWifi); return; }
+  $("wName").value = profile.nick;
+  $("wHello").textContent = profile.nick;
   $("wHost").classList.toggle("hidden", !CAN_LEAD);
   $("wWebNote").classList.toggle("hidden", CAN_LEAD);
   $("wJoin").className = CAN_LEAD ? "btn ghost" : "btn";
@@ -200,6 +241,7 @@ function openWifi(){
   show("s-w-name");
 }
 $("goWifi").onclick = openWifi;
+$("wEditName").onclick = () => showProfile(false, openWifi);
 
 // ============================================================
 //   وضع الهاتف الواحد
@@ -340,8 +382,8 @@ async function sendInvite(){
 
 function myName(){ return ($("wName").value || "").trim(); }
 function needName(){
-  const n = myName();
-  if(!n){ toast("اكتب اسمك أولاً ✍️"); $("wName").focus(); return null; }
+  const n = hasProfile() ? profile.nick : myName();
+  if(!n){ showProfile(true, openWifi); return null; }
   store.set("myName", n); return n;
 }
 
@@ -1033,7 +1075,7 @@ if(APP){
     if(!$("modal").classList.contains("hidden")){ $("mNo").click(); return; }
     if(!$("sheet").classList.contains("hidden")){ closeSheet(); return; }
     const on = document.querySelector(".screen.on");
-    if(!on || on.id === "s-home") APP.exitApp();
+    if(!on || on.id === "s-home" || (on.id === "s-profile" && !hasProfile())) APP.exitApp();
     else if(on.id === "s-w-find") document.querySelector("[data-wback]").click();
     else if(on.id === "s-words-cat") $("wordsBack").click();
     else if(on.id === "s-w-room") $("wLeave").click();
@@ -1041,6 +1083,8 @@ if(APP){
     else show("s-home");
   });
 }
+
+renderHomeProfile();
 
 // الموقع يخدم بلا إنترنت بعد أول زيارة
 if(!NATIVE && location.protocol === "https:" && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});

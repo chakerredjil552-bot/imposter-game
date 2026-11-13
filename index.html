@@ -43,8 +43,26 @@
   </div>
 </section>
 
+<!-- ===== الملف الشخصي: الاسم واللقب ===== -->
+<section class="screen" id="s-profile">
+  <div class="top"><button class="x hidden" id="pfBack">➜</button><span class="sp"></span></div>
+  <div class="center">
+    <div class="pf-av" id="pfAv">؟</div>
+    <div class="big" id="pfTitle">عرّفنا بيك 👋</div>
+    <div class="pf-form">
+      <label class="pf-l" for="pfName">اسمك</label>
+      <input class="field" id="pfName" maxlength="20" placeholder="مثال: شاكر" autocomplete="off">
+      <label class="pf-l" for="pfNick">لقبك في اللعب 😎</label>
+      <input class="field" id="pfNick" maxlength="14" placeholder="مثال: الذيب" autocomplete="off">
+      <div class="small">اللقب هو اللي يبان لصحابك في الغرفة: <b id="pfPreview">لقبك</b></div>
+    </div>
+  </div>
+  <button class="btn" id="pfSave">يلا نبداو ✔</button>
+</section>
+
 <!-- ===== القائمة الرئيسية ===== -->
 <section class="screen" id="s-home">
+  <button class="me-chip" id="homeProfile"><span class="av" id="homeAv">؟</span><span id="homeNick"></span><span class="ed-ic">✏️</span></button>
   <div class="home-head">
     <img src="icon.svg" class="logo" alt="">
     <h1>شكون <span>المحتال؟</span></h1>
@@ -160,9 +178,10 @@
 <section class="screen" id="s-w-name">
   <div class="top"><button class="x" data-home>➜</button><span class="chip">📶 العب مع صحابك</span><span class="sp"></span></div>
   <div class="center">
-    <div class="emoji">🙋</div>
-    <div class="big">واش اسمك؟</div>
-    <input class="field" id="wName" maxlength="14" placeholder="اكتب اسمك">
+    <div class="emoji">👋</div>
+    <div class="big">مرحبا <span class="pname" id="wHello"></span></div>
+    <button class="link" id="wEditName">✏️ بدّل اسمك</button>
+    <input type="hidden" id="wName">
     <div class="small">كل الصحاب لازم يكونو في نفس الواي فاي،<br>ولا متصلين بنقطة الاتصال (هوتسبوت) تاع القائد.</div>
   </div>
   <button class="btn" id="wHost">👑 إنشاء غرفة</button>
