@@ -57,6 +57,8 @@ function setAvatarEl(el, id, name){
 }
 function refreshAvatars(){
   ["wPlayers", "wVoteList"].forEach(id => { const el = document.getElementById(id); if(el) el.dataset.key = ""; });
+  if(typeof UNO !== "undefined" && UNO.state) return UNO.render(true);
+  if(typeof SJ !== "undefined" && SJ.state) return SJ.render(true);
   if(lastState) onState(lastState);
 }
 const AV_COLORS = ["#ffcf3f","#3fe0a5","#ff8da0","#9d8bff","#6fd3ff","#ffa95c","#c6f26b","#f39cff"];
@@ -312,9 +314,9 @@ $("pfSave").onclick = () => {
   myPfp = pendingPfp || null; store.set("pfp", myPfp);
   renderHomeProfile(); vibe(20);
   const next = profileAfter; profileAfter = null;
-  if(next) next(); else { toast("✅ تسجل"); show("s-home"); }
+  if(next) next(); else { toast("✅ تسجل"); show("s-games"); }
 };
-$("pfBack").onclick = () => show("s-home");
+$("pfBack").onclick = () => show("s-games");
 function renderHomeProfile(){
   if(!hasProfile()) return;
   $("homeNick").textContent = profile.nick;
@@ -325,7 +327,7 @@ async function splash(){
   show("s-splash");
   await wait(1900);
   if(!$("s-splash").classList.contains("on")) return;
-  if(pendingJoin) goPendingJoin(); else show("s-home");
+  if(pendingJoin) goPendingJoin(); else show("s-games");
 }
 // ----- روابط الدعوة -----
 function parseInvite(text){
@@ -354,6 +356,20 @@ if(APP){
   APP.getLaunchUrl().then(r => { if(r && r.url) handleInviteUrl(r.url); }).catch(() => {});
 }
 document.querySelectorAll("[data-home]").forEach(b => b.onclick = () => show("s-home"));
+// ----- اختيار اللعبة -----
+let currentGame = "mohtal";
+document.querySelectorAll("[data-games]").forEach(b => b.onclick = () => show("s-games"));
+document.querySelectorAll("[data-game]").forEach(b => b.onclick = () => {
+  vibe(12);
+  const g = b.dataset.game;
+  ensureProfile(() => {
+    currentGame = g;
+    if(g === "mohtal") show("s-home");
+    else if(g === "uno") UNO.openStart();
+    else if(g === "sj") SJ.openStart();
+  });
+});
+function gameHome(){ return currentGame === "uno" ? "s-uno-start" : currentGame === "sj" ? "s-sj-start" : "s-w-name"; }
 $("goPass").onclick = () => { renderPassSetup(); show("s-pass-setup"); };
 function openWifi(){
   if(!hasProfile()){ showProfile(true, openWifi); return; }
@@ -548,20 +564,21 @@ function showPlayerCard(p){
 }
 function closePlayerCard(){ $("pcard").classList.add("hidden"); }
 // رابط الدعوة: يفتح التطبيق في الغرفة، ولا المتصفح
-function inviteLink(){
-  const s = lastState; if(!s || !s.ips.length) return null;
+function inviteLink(st){
+  const s = st || lastState; if(!s || !s.ips.length) return null;
   const host = s.players.find(p => p.host);
   return `${SITE}join.html?r=${encodeURIComponent(s.ips[0])}${httpPort !== HTTP_PORT ? "&h=" + httpPort : ""}&n=${encodeURIComponent(host ? host.name : "")}`;
 }
-async function copyCode(){
-  const s = lastState; if(!s || !s.ips.length) return;
+async function copyCode(st){
+  const s = (st && st.ips) ? st : lastState; if(!s || !s.ips.length) return;
   toast(await copyText(s.ips[0]) ? "📋 تنسخ الرمز: " + s.ips[0] : "ما قدرناش ننسخو");
   vibe(15);
 }
-async function sendInvite(){
-  const link = inviteLink(); if(!link){ toast("شعّل الواي فاي ولا نقطة الاتصال أولاً"); return; }
-  const code = lastState.ips[0];
-  const text = `تعال نلعبو شكون المحتال؟ 🕵️\nادخل للغرفة من هنا 👇\n${link}\n\nولا اكتب رمز الغرفة: ${code}\n(لازم تكون في نفس الواي فاي)`;
+async function sendInvite(st, gameTitle){
+  const s = (st && st.ips) ? st : lastState;
+  const link = inviteLink(s); if(!link){ toast("شعّل الواي فاي ولا نقطة الاتصال أولاً"); return; }
+  const code = s.ips[0];
+  const text = `تعال نلعبو ${gameTitle || "شكون المحتال؟ 🕵️"}\nادخل للغرفة من هنا 👇\n${link}\n\nولا اكتب رمز الغرفة: ${code}\n(لازم تكون في نفس الواي فاي)`;
   if(SHARE){
     try{ await SHARE.share({ title: "شكون المحتال؟", text, dialogTitle: "ابعث الدعوة لصحابك" }); return; }catch(e){ if(String(e && e.message).match(/cancel/i)) return; }
   } else if(navigator.share){
@@ -796,13 +813,32 @@ class HostRoom {
 }
 
 // ----- إنشاء غرفة -----
+// يفتح سيرفر الغرفة على هاتف القائد ويرجع الرابط والعناوين (لكل الألعاب)
+async function openRoomServer(name, label){
+  let url, ips = [];
+  if(LN){
+    const r = await LN.startServer({ port: PORT, name: (label ? label + " " : "") + name });
+    const port = r.port || PORT;
+    ips = (r.ips || []).map(ip => port === PORT ? ip : ip + ":" + port);
+    webLinks = r.httpPort > 0 ? (r.ips || []).map(ip => `http://${ip}:${r.httpPort}`) : [];
+    httpPort = r.httpPort > 0 ? r.httpPort : HTTP_PORT;
+    url = `ws://127.0.0.1:${port}/?role=host&id=${myId}&name=${encodeURIComponent(name)}`;
+  } else {
+    url = `ws://${location.hostname || "localhost"}:${TEST_PORT}/?role=host&id=${myId}&name=${encodeURIComponent(name)}`;
+    ips = [location.hostname || "localhost"];
+    webLinks = [`http://${location.host}/`];
+    httpPort = +location.port || 80;
+  }
+  if(LN && !ips.length) toast("⚠️ شعّل الواي فاي ولا نقطة الاتصال باش صحابك يدخلو");
+  return { url, ips };
+}
 $("wHost").onclick = async () => {
   const name = needName(); if(!name) return;
   $("wHost").disabled = true;
   try{
     let url, ips = [];
     if(LN){
-      const r = await LN.startServer({ port: PORT, name });
+      const r = await LN.startServer({ port: PORT, name: "🕵️ " + name });
       const port = r.port || PORT;
       ips = (r.ips || []).map(ip => port === PORT ? ip : ip + ":" + port);
       webLinks = r.httpPort > 0 ? (r.ips || []).map(ip => `http://${ip}:${r.httpPort}`) : [];
@@ -881,7 +917,9 @@ function joinRoom(ip, port){
   let gotState = false;
   const url = `ws://${ip}:${port}/?role=player&id=${myId}&name=${encodeURIComponent(name)}`;
   net = new Link(url, m => {
-    if(m.t === "msg" && m.d && m.d.type === "state"){ gotState = true; onState(m.d.s); }
+    if(m.t === "msg" && m.d && m.d.type === "state"){ gotState = true; currentGame = "mohtal"; onState(m.d.s); }
+    else if(m.t === "msg" && m.d && m.d.type === "uno"){ gotState = true; currentGame = "uno"; UNO.onState(m.d.s); }
+    else if(m.t === "msg" && m.d && m.d.type === "sj"){ gotState = true; currentGame = "sj"; SJ.onState(m.d.s); }
     else if(m.t === "msg" && m.d && m.d.type === "pfp"){ pfpCache[m.d.id] = m.d.data || null; if(lastState) refreshAvatars(); }
     else if(m.t === "kicked"){ leaveRoom(false); toast("القائد خرّجك من الغرفة 😅"); }
     else if(m.t === "hostgone"){ leaveRoom(false); toast("القائد سكّر الغرفة"); }
@@ -905,9 +943,12 @@ async function leaveRoom(sendBye){
     setTimeout(() => n.close(), sendBye ? 150 : 0);
   }
   if(isHost && LN) LN.stopServer().catch(() => {});
+  if(room && room.destroy) room.destroy();
   isHost = false; room = null; lastState = null;
+  if(typeof UNO !== "undefined") UNO.left();
+  if(typeof SJ !== "undefined") SJ.left();
   keepAwake(false);
-  show("s-w-name");
+  show(gameHome());
 }
 $("wLeave").onclick = async () => {
   if(await ask(isHost ? "تسكّر الغرفة؟ كل اللاعبين يخرجو." : "تخرج من الغرفة؟")) leaveRoom(true);
@@ -1453,12 +1494,16 @@ if(APP){
     if(!$("wordSheet").classList.contains("hidden")){ closeWordSheet(); return; }
     if(!$("pcard").classList.contains("hidden")){ closePlayerCard(); return; }
     const on = document.querySelector(".screen.on");
-    if(!on || on.id === "s-home" || (on.id === "s-profile" && !hasProfile())) APP.exitApp();
+    if(!on || on.id === "s-games" || (on.id === "s-profile" && !hasProfile())) APP.exitApp();
+    else if(on.id === "s-uno-lobby") $("unoLeave").click();
+    else if(on.id === "s-uno-table") $("utLeave").click();
+    else if(on.id === "s-sj-lobby" || on.id === "s-sj-game") $("sjLeave").click();
+    else if(on.id === "s-uno-start" || on.id === "s-sj-start" || on.id === "s-home") show("s-games");
     else if(on.id === "s-w-find") document.querySelector("[data-wback]").click();
     else if(on.id === "s-words-cat") $("wordsBack").click();
     else if(on.id === "s-w-room") $("wLeave").click();
     else if(on.id.startsWith("s-pass") && on.id !== "s-pass-setup") document.querySelector("[data-quit-pass]").click();
-    else show("s-home");
+    else show(on.id.startsWith("s-w-") || on.id.startsWith("s-pass") || on.id.startsWith("s-words") ? "s-home" : "s-games");
   });
 }
 

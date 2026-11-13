@@ -14,6 +14,7 @@
 <meta name="apple-mobile-web-app-title" content="المحتال">
 <meta name="description" content="شكون المحتال؟ لعبة جماعية بالعربية — صُنع بواسطة Chaker Red">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="uno.css">
 </head>
 <body>
 <div class="app">
@@ -69,9 +70,148 @@
   <button class="btn" id="pfSave">يلا نبداو ✔</button>
 </section>
 
-<!-- ===== القائمة الرئيسية ===== -->
-<section class="screen" id="s-home">
+<!-- ===== اختيار اللعبة ===== -->
+<section class="screen" id="s-games">
   <button class="me-chip" id="homeProfile"><span class="av" id="homeAv">؟</span><span id="homeNick"></span><span class="ed-ic">✏️</span></button>
+  <div class="home-head" style="margin-bottom:6px">
+    <img src="icon.svg" class="logo" alt="">
+    <h1>واش <span>نلعبو؟</span></h1>
+    <p class="sub">اختار اللعبة 👇</p>
+  </div>
+  <div class="games">
+    <button class="gcard g1" data-game="mohtal"><span class="gi">🕵️</span><span><b>شكون المحتال؟</b><small>كل واحد يشوف كلمة… إلا المحتال</small></span></button>
+    <button class="gcard g2" data-game="uno"><span class="gi">🃏</span><span><b>أونو</b><small>عادي • بلا رحمة • فليب — في نفس الواي فاي</small></span></button>
+    <button class="gcard g3" data-game="sj"><span class="gi">❓</span><span><b>سين جيم</b><small>فريقين، 6 فئات، 36 سؤال ووسائل مساعدة</small></span></button>
+  </div>
+  <div class="foot">صُنع بواسطة <b>Chaker Red</b></div>
+</section>
+
+<!-- ===== أونو: البداية ===== -->
+<section class="screen" id="s-uno-start">
+  <div class="top"><button class="x" data-games>➜</button><span class="chip">🃏 أونو</span><span class="sp"></span></div>
+  <div class="center">
+    <div class="uno-hero"><div class="uc c-r" style="--cw:86px;transform:rotate(-14deg) translate(30px,10px)"><span class="cor a">7</span><div class="mid"><span class="sym">7</span></div><span class="cor b">7</span></div><div class="uc wild" style="--cw:96px;z-index:2"><span class="cor a">+4</span><div class="mid"><span class="sym">+4</span></div><span class="cor b">+4</span></div><div class="uc c-b" style="--cw:86px;transform:rotate(14deg) translate(-30px,10px)"><span class="cor a">⇄</span><div class="mid"><span class="sym">⇄</span></div><span class="cor b">⇄</span></div></div>
+    <div class="big">مرحبا <span class="pname" id="unoHello"></span></div>
+    <div class="small">أونو يتلعب غير في الواي فاي: كل واحد بهاتفو 📶<br>اللي يفتح الطاولة هو اللي يختار القوانين 👑</div>
+  </div>
+  <button class="btn" id="unoHost">👑 افتح طاولة</button>
+  <button class="btn ghost" id="unoJoin">🔎 ادخل لطاولة</button>
+  <div class="small web-note hidden" id="unoWebNote">👑 الطاولة يفتحها القائد من تطبيق أندرويد. أنت تقدر تدخل من الزر اللي فوق ☝️</div>
+</section>
+
+<!-- ===== أونو: الغرفة قبل اللعب ===== -->
+<section class="screen" id="s-uno-lobby">
+  <div class="top"><button class="x" id="unoLeave">✕</button><span class="chip" id="unoRoomChip"></span><span class="count" id="unoCount"></span></div>
+  <div class="panel code-panel hidden" id="unoCodeBox">
+    <div class="small">رمز الطاولة (اضغط عليه باش تنسخو)</div>
+    <button class="code copyable" id="unoCode" dir="ltr"></button>
+    <div class="share-row" style="margin-top:10px">
+      <button class="btn small-btn" id="unoInvite">📤 ابعث الدعوة</button>
+      <button class="btn ghost small-btn" id="unoCopy">📋 نسخ الرمز</button>
+    </div>
+    <div class="web-join hidden" id="unoWebBox"><div class="label">📱 صحابك اللي عندهم آيفون</div><div class="qr" id="unoQr"></div><div class="code small-code" id="unoLink" dir="ltr"></div></div>
+  </div>
+  <div class="panel">
+    <div class="row"><div class="label">اللاعبين</div><div class="small" id="unoPInfo"></div></div>
+    <div class="plist" id="unoPlayers"></div>
+  </div>
+  <div class="panel" id="unoSettings"></div>
+  <div class="sticky">
+    <button class="btn host-only" id="unoStart">ابدأ اللعب ▶</button>
+    <div class="wait guest-only">⏳ في انتظار القائد يبدأ اللعب…</div>
+  </div>
+</section>
+
+<!-- ===== أونو: الطاولة (الهاتف بالعرض) ===== -->
+<section class="screen" id="s-uno-table">
+  <div class="ut-bg"><div class="felt"></div><canvas id="utCanvas"></canvas></div>
+  <div class="ut" id="utMain">
+    <div class="ut-top">
+      <button class="ut-x" id="utLeave">✕</button>
+      <div class="opps" id="utOpps"></div>
+      <div class="ut-info"><span class="ut-chip" id="utMode"></span><span class="ut-chip" id="utSide"></span></div>
+    </div>
+    <div class="ut-mid">
+      <div class="deck" id="utDeck"><div class="deck-lbl hidden" id="utDeckLbl">👆 اسحب</div></div>
+      <div class="pile-wrap" id="utPileWrap">
+        <div class="color-glow" id="utGlow"></div>
+        <div class="dir-ring" id="utDir"></div>
+        <div class="pile" id="utPile"></div>
+        <div class="pend hidden" id="utPend"></div>
+      </div>
+      <div class="actions">
+        <button class="ubtn uno-btn" id="utUno">أونو!</button>
+        <button class="ubtn go hidden" id="utPlay">العب ✔</button>
+        <button class="ubtn danger hidden" id="utChallenge">⚔️ تحدّى</button>
+        <button class="ubtn hidden" id="utTake">🃏 اسحب</button>
+        <button class="ubtn hidden" id="utPass">⏭️ فوت</button>
+      </div>
+    </div>
+    <div class="ut-hand">
+      <div class="myturn-bar"><i id="utBar"></i></div>
+      <div class="turn-msg" id="utTurnMsg"></div>
+      <div class="hand-tools"><button id="utMateBtn" class="hidden">🤝</button><button id="utSortC">🎨 لون</button><button id="utSortN">🔢 رقم</button></div>
+      <div class="mates hidden" id="utMates"></div>
+      <div class="hand" id="utHand"></div>
+    </div>
+  </div>
+  <div id="utModal"></div>
+  <div class="rotate-msg"><div class="ph">📱</div><div class="big">دوّر الهاتف بالعرض</div><div class="small">أونو يتلعب والهاتف مدوّر 90°</div></div>
+</section>
+
+<!-- ===== سين جيم: البداية ===== -->
+<section class="screen" id="s-sj-start">
+  <div class="top"><button class="x" data-games>➜</button><span class="chip">❓ سين جيم</span><span class="sp"></span></div>
+  <div class="center">
+    <div class="emoji">❓</div>
+    <div class="big">مرحبا <span class="pname" id="sjHello"></span></div>
+    <div class="small">فريقين ضد بعض • 6 فئات • 36 سؤال<br>200 • 400 • 600 نقطة، و3 وسائل مساعدة لكل فريق<br>اللي يفتح الغرفة هو الحكم 👑 (يشوف الأجوبة)</div>
+  </div>
+  <button class="btn" id="sjHost">👑 افتح غرفة (أنا الحكم)</button>
+  <button class="btn ghost" id="sjJoin">🔎 ادخل لغرفة</button>
+  <div class="small web-note hidden" id="sjWebNote">👑 الغرفة يفتحها الحكم من تطبيق أندرويد. أنت تقدر تدخل من الزر اللي فوق ☝️</div>
+</section>
+
+<!-- ===== سين جيم: الغرفة ===== -->
+<section class="screen" id="s-sj-lobby">
+  <div class="top"><button class="x" id="sjLeave">✕</button><span class="chip" id="sjRoomChip"></span><span class="sp"></span></div>
+  <div class="panel code-panel hidden" id="sjCodeBox">
+    <div class="small">رمز الغرفة (اضغط باش تنسخو)</div>
+    <button class="code copyable" id="sjCode" dir="ltr"></button>
+    <div class="share-row" style="margin-top:10px"><button class="btn small-btn" id="sjInvite">📤 ابعث الدعوة</button><button class="btn ghost small-btn" id="sjCopy">📋 نسخ الرمز</button></div>
+    <div class="web-join hidden" id="sjWebBox"><div class="label">📱 صحابك اللي عندهم آيفون</div><div class="qr" id="sjQr"></div><div class="code small-code" id="sjLink" dir="ltr"></div></div>
+  </div>
+  <div class="panel"><div class="row"><div class="label">الفرق</div><div class="small host-only">⇄ باش تبدّل الفريق</div></div><div id="sjTeams" class="sj-teams"></div></div>
+  <div class="panel"><div class="row"><div class="label">الفئات</div><div class="small" id="sjCatInfo"></div></div><div class="cats" id="sjCats"></div></div>
+  <div class="panel" id="sjSet"></div>
+  <div class="sticky">
+    <button class="btn host-only" id="sjStart">ابدأ سين جيم ▶</button>
+    <div class="wait guest-only">⏳ في انتظار الحكم يبدأ…</div>
+  </div>
+</section>
+
+<!-- ===== سين جيم: اللعب ===== -->
+<section class="screen" id="s-sj-game">
+  <div class="top"><button class="x sjLeave2">✕</button><span class="chip">❓ سين جيم</span><button class="x host-only" id="sjEnd" title="نهاية">🏁</button></div>
+  <div class="sj-scores" id="sjScores"></div>
+  <div id="sjBoard" class="view on"><div class="sj-turn" id="sjTurn"></div><div class="sj-grid"></div></div>
+  <div id="sjQ" class="view on hidden">
+    <div class="sj-qcard">
+      <div class="sj-qtop"><span class="chip" id="sjQCat"></span><div class="sj-ring" id="sjRing"><span id="sjTime"></span></div></div>
+      <div class="sj-qtext" id="sjQText"></div>
+      <div class="small" id="sjQWho"></div>
+      <div id="sjQUsed"></div>
+    </div>
+    <div class="sj-helpers" id="sjHelpers"></div>
+    <div class="panel hidden" id="sjAnswer"></div>
+    <div class="sj-judge hidden" id="sjJudge"></div>
+  </div>
+  <div id="sjOver" class="view on hidden center"></div>
+</section>
+
+<!-- ===== القائمة الرئيسية (شكون المحتال؟) ===== -->
+<section class="screen" id="s-home">
+  <div class="top"><button class="x" data-games>➜</button><span class="chip">🕵️ شكون المحتال؟</span><span class="sp"></span></div>
   <div class="home-head">
     <img src="icon.svg" class="logo" alt="">
     <h1>شكون <span>المحتال؟</span></h1>
@@ -389,5 +529,9 @@
 <script src="defs8.js"></script>
 <script src="photos.js"></script>
 <script src="app.js"></script>
+<script src="uno-engine.js"></script>
+<script src="uno-ui.js"></script>
+<script src="sj-data.js"></script>
+<script src="sj.js"></script>
 </body>
 </html>

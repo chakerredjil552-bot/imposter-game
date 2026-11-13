@@ -1,4 +1,4 @@
-﻿@font-face{font-family:"Cairo";src:url("cairo-arabic.woff2") format("woff2");font-weight:200 1000;font-display:swap;unicode-range:U+0600-06FF,U+0750-077F,U+0870-08FF,U+FB50-FDFF,U+FE70-FEFF,U+200C-200E}
+@font-face{font-family:"Cairo";src:url("cairo-arabic.woff2") format("woff2");font-weight:200 1000;font-display:swap;unicode-range:U+0600-06FF,U+0750-077F,U+0870-08FF,U+FB50-FDFF,U+FE70-FEFF,U+200C-200E}
 @font-face{font-family:"Cairo";src:url("cairo-latin.woff2") format("woff2");font-weight:200 1000;font-display:swap;unicode-range:U+0000-00FF,U+2000-206F}
 :root{
   --bg:#151229; --bg2:#1f1a3d; --card:#2a2352; --line:#3b3270;
