@@ -47,8 +47,17 @@
 <section class="screen" id="s-profile">
   <div class="top"><button class="x hidden" id="pfBack">➜</button><span class="sp"></span></div>
   <div class="center">
-    <div class="pf-av" id="pfAv">؟</div>
+    <button class="pf-av-wrap" id="pfPick" aria-label="صورة البروفايل"><span class="pf-av" id="pfAv">؟</span><span class="pf-cam">📷</span></button>
+    <button class="link hidden" id="pfRemove">🗑️ نحّي الصورة</button>
     <div class="big" id="pfTitle">عرّفنا بيك 👋</div>
+    <div class="pc-stats hidden" id="pfStats">
+      <div><b id="pfGames">0</b><span>🎮 جولات</span></div>
+      <div><b id="pfRate">0%</b><span>🏆 نسبة الربح</span></div>
+      <div><b id="pfRight">0</b><span>🎯 تخمين صح</span></div>
+      <div><b id="pfImp">0</b><span>😈 ربح كمحتال</span></div>
+      <div><b id="pfCrew">0</b><span>😇 ربح كبريء</span></div>
+      <div><b id="pfLoss">0</b><span>💔 خسارات</span></div>
+    </div>
     <div class="pf-form">
       <label class="pf-l" for="pfName">اسمك</label>
       <input class="field" id="pfName" maxlength="20" placeholder="مثال: شاكر" autocomplete="off">
@@ -91,6 +100,11 @@
     <button class="btn ghost small-btn" id="shareAll">📤 شارك كل كلماتي</button>
     <button class="btn ghost small-btn" id="importAll">📥 كلمات صاحبي</button>
   </div>
+  <div class="share-row">
+    <button class="btn ghost small-btn" id="exportData">📦 تصدير بياناتي</button>
+    <button class="btn ghost small-btn" id="importData">📂 استرجاع بياناتي</button>
+  </div>
+  <div class="small" style="text-align:center">التصدير يحفظ كلماتك وتعريفاتك وصورك في ملف واحد</div>
   <div class="wcats" id="wcats"></div>
 </section>
 
@@ -99,9 +113,12 @@
   <div class="top"><button class="x" id="wordsBack">➜</button><span class="chip" id="wcTitle"></span><span class="count" id="wcCount"></span></div>
   <div class="panel">
     <div class="label">➕ زيد كلمة</div>
+    <input class="field wide" id="wcNew" maxlength="30" placeholder="الكلمة" style="margin-top:8px">
+    <input class="field wide" id="wcNewDef" maxlength="80" placeholder="التعريف (لازم) — مثال: حيوان يعيش في الغابة" style="margin-top:8px">
     <div class="row" style="margin-top:8px">
-      <input class="field" id="wcNew" maxlength="30" placeholder="اكتب الكلمة هنا">
-      <button class="btn small-btn" id="wcAdd">زيد</button>
+      <button class="btn ghost small-btn" id="wcNewPhoto">📷 صورة (اختياري)</button>
+      <img class="mini-photo hidden" id="wcNewPhotoPrev" alt="">
+      <button class="btn small-btn" id="wcAdd">زيد ✔</button>
     </div>
   </div>
   <div class="share-row">
@@ -147,6 +164,7 @@
     <div class="big pname" id="passName"></div>
     <div class="flip" id="pFlip"></div>
   </div>
+  <button class="btn ghost small-btn hidden add-photo" id="pAddPhoto">📷 زيد صورة لهذي الكلمة</button>
   <button class="btn hidden" id="pNext">فهمت، خبّي ومرّر ⬅</button>
 </section>
 
@@ -250,6 +268,7 @@
     <div class="center">
       <div class="small" id="wCardTop">اضغط مطوّل على البطاقة باش تشوف كلمتك — كي تسيّب تتخبّى</div>
       <div class="flip" id="wFlip"></div>
+      <button class="btn ghost small-btn hidden add-photo" data-addphoto>📷 زيد صورة لهذي الكلمة</button>
       <div class="seen" id="wSeen"></div>
     </div>
     <div class="sticky">
@@ -266,6 +285,7 @@
       <div class="spin" id="wSpin"></div>
       <div class="small rule hidden" id="wRule">كل واحد يقول كلمة وحدة على كلمتو بلا ما يفضحها،<br>ومن بعد تناقشو وتصوتو على المحتال.</div>
       <button class="peek" data-peek>👁️ اضغط مطوّل باش تشوف كلمتك</button>
+      <button class="btn ghost small-btn hidden add-photo" data-addphoto>📷 زيد صورة لهذي الكلمة</button>
     </div>
     <div class="sticky">
       <button class="btn host-only" id="wVote">🗳️ تصويت: شكون المحتال؟</button>
@@ -312,7 +332,7 @@
 </div>
 
 <!-- كلمتي: تبان غير وقت الضغط المطوّل -->
-<div class="peek-pop hidden" id="peekPop"><div class="peek-card"><div class="cat-l" id="peekCat"></div><div class="word" id="peekWord"></div><div class="hint">سيّب صبعك باش تخبّيها</div></div></div>
+<div class="peek-pop hidden" id="peekPop"><div class="peek-card"><div class="cat-l" id="peekCat"></div><img class="wphoto hidden" id="peekImg" alt=""><div class="word" id="peekWord"></div><div class="def hidden" id="peekDef"></div><div class="hint">سيّب صبعك باش تخبّيها</div></div></div>
 <!-- بطاقة اللاعب: إحصائياتو في اللعب أونلاين -->
 <div class="modal hidden" id="pcard"><div class="mbox pc">
   <div class="pf-av" id="pcAv">؟</div>
@@ -323,8 +343,23 @@
     <div><b id="pcCrew">0</b><span>😇 ربح كبريء</span></div>
     <div><b id="pcRight">0</b><span>🎯 خمّن المحتال صح</span></div>
   </div>
+  <div class="label" id="pcRate"></div>
   <div class="small" id="pcGames"></div>
   <button class="btn ghost" id="pcClose">رجوع</button>
+</div></div>
+<!-- تعديل كلمة: التعريف والصورة -->
+<div class="modal hidden" id="wordSheet"><div class="mbox sheet">
+  <div class="big" id="wsWord"></div>
+  <label class="pf-l" for="wsDef">التعريف</label>
+  <textarea id="wsDef" rows="2" maxlength="80"></textarea>
+  <div class="label">📷 الصورة</div>
+  <img class="ws-photo hidden" id="wsPhoto" alt="">
+  <div class="small" id="wsNoPhoto">ما عندهاش صورة</div>
+  <div class="share-row">
+    <button class="btn ghost small-btn" id="wsPick">📷 اختار صورة</button>
+    <button class="btn ghost small-btn hidden" id="wsDelPhoto">🗑️ نحّي الصورة</button>
+  </div>
+  <div class="mbtns"><button class="btn" id="wsSave">حفظ ✔</button><button class="btn ghost" id="wsClose">رجوع</button></div>
 </div></div>
 <!-- مشاركة / استيراد الكلمات -->
 <div class="modal hidden" id="sheet"><div class="mbox sheet">
@@ -344,6 +379,15 @@
 <script src="words.js"></script>
 <script src="words2.js"></script>
 <script src="words3.js"></script>
+<script src="defs1.js"></script>
+<script src="defs2.js"></script>
+<script src="defs3.js"></script>
+<script src="defs4.js"></script>
+<script src="defs5.js"></script>
+<script src="defs6.js"></script>
+<script src="defs7.js"></script>
+<script src="defs8.js"></script>
+<script src="photos.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

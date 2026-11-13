@@ -42,6 +42,23 @@ function confetti(){
   }
   setTimeout(() => box.innerHTML = "", 4500);
 }
+// صور البروفايل: صورتي (في الهاتف) + صور اللاعبين في الغرفة
+let myPfp = store.get("pfp", null);
+const pfpCache = {};
+function avatarHTML(id, name, extra){
+  const img = pfpCache[id];
+  return img ? `<span class="av has-img ${extra || ""}" style="background-image:url('${img}')"></span>`
+    : `<span class="av ${extra || ""}" style="background:${avColor(id)}">${esc((name || "؟").trim()[0] || "؟")}</span>`;
+}
+function setAvatarEl(el, id, name){
+  const img = id === myId ? myPfp : pfpCache[id];
+  if(img){ el.textContent = ""; el.style.background = ""; el.style.backgroundImage = `url('${img}')`; el.classList.add("has-img"); }
+  else { el.style.backgroundImage = ""; el.classList.remove("has-img"); el.style.background = avColor(id); el.textContent = (name || "؟").trim()[0] || "؟"; }
+}
+function refreshAvatars(){
+  ["wPlayers", "wVoteList"].forEach(id => { const el = document.getElementById(id); if(el) el.dataset.key = ""; });
+  if(lastState) onState(lastState);
+}
 const AV_COLORS = ["#ffcf3f","#3fe0a5","#ff8da0","#9d8bff","#6fd3ff","#ffa95c","#c6f26b","#f39cff"];
 function avColor(id){ let h = 0; for(const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; }
 
@@ -49,9 +66,93 @@ function avColor(id){ let h = 0; for(const c of String(id)) h = (h * 31 + c.char
 const CATS = RAW_CATEGORIES.map(c => ({ id: c.id, icon: c.icon, name: c.name.replace(" 🇩🇿", ""),
   base: [...new Set(c.words.split("\n").map(s => s.trim()).filter(Boolean))], list: [] }));
 const catById = id => CATS.find(c => c.id === id);
-// تعديلات المستعمل: كلمات زادها وكلمات نحّاها (تتسجل في الهاتف)
+// التعريفات الأصلية لكل كلمة
+for(const c of CATS){
+  c.defs = {};
+  for(const line of String((typeof RAW_DEFS !== "undefined" && RAW_DEFS[c.id]) || "").split("\n")){
+    const i = line.indexOf("="); if(i > 0) c.defs[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+  }
+}
+// تعديلات المستعمل: كلمات زادها وكلمات نحّاها + تعريفاتو (تتسجل في الهاتف)
 let wordEdits = store.get("wordEdits", {});
-function catEdits(id){ return wordEdits[id] || (wordEdits[id] = { added: [], removed: [] }); }
+function catEdits(id){
+  const e = wordEdits[id] || (wordEdits[id] = { added: [], removed: [] });
+  if(!e.defs) e.defs = {};
+  return e;
+}
+// تعريف الكلمة: تعريف المستعمل أولاً، ومن بعد الأصلي
+function getDef(catId, word){
+  const e = wordEdits[catId], c = catById(catId);
+  return (e && e.defs && e.defs[word]) || (c && c.defs[word]) || "";
+}
+
+// ----- صور الكلمات (تتسجل في الهاتف فقط) -----
+const photoDB = (() => {
+  let dbp = null;
+  const open = () => dbp || (dbp = new Promise((res, rej) => {
+    const r = indexedDB.open("mohtal", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("photos");
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+  const tx = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction("photos", mode); const q = fn(t.objectStore("photos")); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); }); };
+  return {
+    get: k => tx("readonly", s => s.get(k)).catch(() => null),
+    set: (k, v) => tx("readwrite", s => s.put(v, k)).catch(() => null),
+    del: k => tx("readwrite", s => s.delete(k)).catch(() => null),
+    keys: () => tx("readonly", s => s.getAllKeys()).catch(() => [])
+  };
+})();
+const photoKey = (catId, word) => catId + "|" + word;
+let photoIndex = new Set();   // الكلمات اللي عندها صورة (باش نبينو 📷 بلا ما نقراو الصور)
+photoDB.keys().then(ks => { photoIndex = new Set(ks || []); });
+// صور مدمجة في اللعبة للجميع (photos.js — نعمروها من بيانات المستعمل لاحقاً)
+const BUILTIN = (typeof BUILTIN_PHOTOS !== "undefined" && BUILTIN_PHOTOS) || {};
+async function getPhoto(catId, word){
+  const k = photoKey(catId, word);
+  return (photoIndex.has(k) && await photoDB.get(k)) || BUILTIN[k] || null;
+}
+const hasPhoto = (catId, word) => photoIndex.has(photoKey(catId, word)) || !!BUILTIN[photoKey(catId, word)];
+async function savePhoto(catId, word, data){
+  const k = photoKey(catId, word);
+  await photoDB.set(k, data); photoIndex.add(k);
+}
+async function deletePhoto(catId, word){
+  const k = photoKey(catId, word);
+  await photoDB.del(k); photoIndex.delete(k);
+}
+// وسط اللعب: نزيدو صورة مرة وحدة (التبديل من تعديل الكلمات برك)
+async function addPhotoMidGame(catId, word){
+  if(hasPhoto(catId, word)){ toast("الكلمة عندها صورة — بدّلها من ✏️ تعديل الكلمات"); return null; }
+  const img = await pickImage(480);
+  if(!img) return null;
+  await savePhoto(catId, word, img);
+  toast("✅ تزادت الصورة — باش تبدلها روح لتعديل الكلمات"); vibe(20);
+  return img;
+}
+// تصغير الصورة قبل ما نسجلوها
+function pickImage(maxSide, square){
+  return new Promise(res => {
+    const inp = document.createElement("input");
+    inp.type = "file"; inp.accept = "image/*";
+    inp.onchange = () => {
+      const f = inp.files && inp.files[0]; if(!f){ res(null); return; }
+      const img = new Image(), url = URL.createObjectURL(f);
+      img.onload = () => {
+        let sw = img.width, sh = img.height, sx = 0, sy = 0;
+        if(square){ const m = Math.min(sw, sh); sx = (sw - m) / 2; sy = (sh - m) / 2; sw = sh = m; }
+        const k = Math.min(1, maxSide / Math.max(sw, sh));
+        const cv = document.createElement("canvas");
+        cv.width = Math.round(sw * k); cv.height = Math.round(sh * k);
+        cv.getContext("2d").drawImage(img, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(url);
+        res(cv.toDataURL("image/jpeg", 0.72));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); res(null); };
+      img.src = url;
+    };
+    inp.click();
+  });
+}
 function applyEdits(){
   for(const c of CATS){
     const e = wordEdits[c.id] || { added: [], removed: [] };
@@ -85,7 +186,7 @@ function renderCatGrid(el, selected, onToggle){
 }
 
 // ---------- البطاقة (نفس الشكل للجميع) ----------
-function cardHTML(){ return `<div class="in"><div class="face front"><div class="q">؟</div><div class="tap">اضغط مطوّل باش تشوف كلمتك 👆</div></div><div class="face back"><div class="cat-l"></div><div class="word"></div><div class="hint"></div><div class="again">سيّب صبعك باش تخبّيها</div></div></div>`; }
+function cardHTML(){ return `<div class="in"><div class="face front"><div class="q">؟</div><div class="tap">اضغط مطوّل باش تشوف كلمتك 👆</div></div><div class="face back"><div class="cat-l"></div><img class="wphoto hidden" alt=""><div class="word"></div><div class="def hidden"></div><div class="hint"></div><div class="again">سيّب صبعك باش تخبّيها</div></div></div>`; }
 
 // الضغط المطوّل: الكلمة تبان غير وقت الضغط، وكي تسيّب صبعك تتخبّى
 function holdToShow(el, onShow, onHide){
@@ -103,10 +204,18 @@ function holdToShow(el, onShow, onHide){
   // لو التطبيق راح للخلفية وهو مضغوط
   document.addEventListener("visibilitychange", () => { if(document.hidden) end(); });
 }
-function fillCard(el, {isImp, word, catName, hint, againText}){
+// التعريف والصورة ما يبانوش أبداً للمحتال
+function fillCard(el, {isImp, word, catName, hint, againText, def, photo}){
   if(!el.firstChild) el.innerHTML = cardHTML();
   el.querySelector(".cat-l").textContent = "الفئة: " + (isImp && !hint ? "؟" : catName);
   el.querySelector(".word").textContent = isImp ? "أنت المحتال 🤫" : word;
+  const d = el.querySelector(".def");
+  d.textContent = !isImp && def ? def : "";
+  d.classList.toggle("hidden", isImp || !def);
+  const im = el.querySelector(".wphoto");
+  if(!isImp && photo){ if(im.src !== photo) im.src = photo; im.classList.remove("hidden"); }
+  else { im.removeAttribute("src"); im.classList.add("hidden"); }
+  el.classList.toggle("has-photo", !isImp && !!photo);
   el.querySelector(".hint").textContent = isImp ? "حاول تفهم الكلمة من كلامهم" : "ما تقولهاش للمحتال!";
   el.querySelector(".again").textContent = againText || "";
 }
@@ -165,15 +274,31 @@ function showProfile(first, after){
   $("pfTitle").textContent = first ? "عرّفنا بيك 👋" : "✏️ بدّل اسمك";
   $("pfSave").textContent = first ? "يلا نبداو ✔" : "حفظ ✔";
   $("pfBack").classList.toggle("hidden", first);
+  pendingPfp = myPfp;
+  // إحصائياتي (تبان كي يبدّل ملفو)
+  const st = getStats();
+  $("pfStats").classList.toggle("hidden", first);
+  $("pfGames").textContent = st.games; $("pfRight").textContent = st.right;
+  $("pfImp").textContent = st.imp; $("pfCrew").textContent = st.crew;
+  $("pfLoss").textContent = Math.max(0, st.games - st.imp - st.crew);
+  $("pfRate").textContent = st.games ? Math.round((st.imp + st.crew) / st.games * 100) + "%" : "—";
   updateNickPreview();
   show("s-profile");
 }
+let pendingPfp = null;
+$("pfPick").onclick = async () => {
+  const img = await pickImage(160, true);
+  if(img){ pendingPfp = img; updateNickPreview(); vibe(15); }
+};
+$("pfRemove").onclick = () => { pendingPfp = null; updateNickPreview(); };
 function ensureProfile(next){ if(hasProfile()) next(); else showProfile(true, next); }
 function updateNickPreview(){
   const n = $("pfNick").value.trim();
   $("pfPreview").textContent = (n || "لقبك") + (n ? "" : "");
-  $("pfAv").textContent = (n || $("pfName").value.trim() || "؟")[0];
-  $("pfAv").style.background = avColor(myId);
+  const av = $("pfAv");
+  if(pendingPfp){ av.textContent = ""; av.style.background = ""; av.style.backgroundImage = `url('${pendingPfp}')`; av.classList.add("has-img"); }
+  else { av.style.backgroundImage = ""; av.classList.remove("has-img"); av.style.background = avColor(myId); av.textContent = (n || $("pfName").value.trim() || "؟")[0]; }
+  $("pfRemove").classList.toggle("hidden", !pendingPfp);
 }
 $("pfNick").oninput = updateNickPreview;
 $("pfName").oninput = updateNickPreview;
@@ -184,6 +309,7 @@ $("pfSave").onclick = () => {
   if(nick.length < 2){ toast("اختار لقب باش يعرفوك صحابك 😎"); $("pfNick").focus(); return; }
   profile = { name, nick };
   store.set("profile", profile); store.set("myName", nick);
+  myPfp = pendingPfp || null; store.set("pfp", myPfp);
   renderHomeProfile(); vibe(20);
   const next = profileAfter; profileAfter = null;
   if(next) next(); else { toast("✅ تسجل"); show("s-home"); }
@@ -192,8 +318,7 @@ $("pfBack").onclick = () => show("s-home");
 function renderHomeProfile(){
   if(!hasProfile()) return;
   $("homeNick").textContent = profile.nick;
-  $("homeAv").textContent = profile.nick[0];
-  $("homeAv").style.background = avColor(myId);
+  setAvatarEl($("homeAv"), myId, profile.nick);
 }
 $("homeProfile").onclick = () => showProfile(false);
 async function splash(){
@@ -254,7 +379,9 @@ function settingsHTML(prefix, s, editable, maxI){
   return `<div class="row set-row"><div><div class="label">عدد المحتالين</div><div class="small">يتم اختيارهم عشوائياً</div></div>
     <div class="stepper"><button ${editable ? "" : "disabled"} data-${prefix}imps="1">+</button><b>${s.imps}</b><button ${editable ? "" : "disabled"} data-${prefix}imps="-1">−</button></div></div>
     <div class="row set-row"><div><div class="label">المحتال يشوف الفئة</div><div class="small">تلميح صغير للمحتال</div></div>
-    <button class="toggle ${s.hint ? "on" : ""}" ${editable ? "" : "disabled"} data-${prefix}hint></button></div>`;
+    <button class="toggle ${s.hint ? "on" : ""}" ${editable ? "" : "disabled"} data-${prefix}hint></button></div>
+    <div class="row set-row"><div><div class="label">إظهار التعريف والصورة</div><div class="small">للاعبين برك — المحتال ما يشوفهمش</div></div>
+    <button class="toggle ${s.showDef !== false ? "on" : ""}" ${editable ? "" : "disabled"} data-${prefix}def></button></div>`;
 }
 function renderPassSetup(){
   if(pcfg.imps > pMaxImps()) pcfg.imps = pMaxImps();
@@ -270,6 +397,7 @@ function renderPassSetup(){
   $("pSettings").innerHTML = settingsHTML("p", pcfg, true);
   $("pSettings").querySelectorAll("[data-pimps]").forEach(b => b.onclick = () => { pcfg.imps = Math.min(pMaxImps(), Math.max(1, pcfg.imps + +b.dataset.pimps)); renderPassSetup(); });
   $("pSettings").querySelector("[data-phint]").onclick = () => { pcfg.hint = !pcfg.hint; renderPassSetup(); };
+  $("pSettings").querySelector("[data-pdef]").onclick = () => { pcfg.showDef = pcfg.showDef === false; renderPassSetup(); };
   renderCatGrid($("pCats"), pcfg.cats, id => {
     pcfg.cats = pcfg.cats.includes(id) ? pcfg.cats.filter(x => x !== id) : [...pcfg.cats, id];
     renderPassSetup();
@@ -288,26 +416,41 @@ function passStart(){
   if(!picked){ toast("الفئات اللي اخترتها فارغة — زيد كلمات ✏️"); return; }
   const { cat, word } = picked;
   const players = Array.from({ length: pcfg.players }, (_, i) => pcfg.names[i] || ("اللاعب " + (i + 1)));
-  pgame = { cat, word, players, imps: shuffle(players.map((_, i) => i)).slice(0, pcfg.imps), turn: 0 };
+  pgame = { cat, word, players, imps: shuffle(players.map((_, i) => i)).slice(0, pcfg.imps), turn: 0,
+    def: pcfg.showDef === false ? "" : getDef(cat.id, word), photo: null };
   $("passCat").textContent = catsLabel(pcfg.cats);
   $("pFlip").innerHTML = cardHTML();
   passTurn(); show("s-pass");
+  // الصورة من الهاتف (إذا كاينة)
+  if(pcfg.showDef !== false) getPhoto(cat.id, word).then(p => { if(pgame && pgame.word === word){ pgame.photo = p; passTurn(true); } });
 }
-function passTurn(){
-  const i = pgame.turn;
+function passTurn(onlyCard){
+  const i = pgame.turn, isImp = pgame.imps.includes(i);
+  fillCard($("pFlip"), { isImp, word: pgame.word, catName: pgame.cat.name, hint: pcfg.hint, againText: "سيّب صبعك باش تخبّيها", def: pgame.def, photo: pgame.photo });
+  if(onlyCard) return;
   $("passName").textContent = pgame.players[i];
   $("passHint").textContent = i === 0 ? "الهاتف عند" : "مرّر الهاتف إلى";
   $("dots").innerHTML = pgame.players.map((_, k) => `<i class="${k < i ? "done" : k === i ? "now" : ""}"></i>`).join("");
-  fillCard($("pFlip"), { isImp: pgame.imps.includes(i), word: pgame.word, catName: pgame.cat.name, hint: pcfg.hint, againText: "سيّب صبعك باش تخبّيها" });
   $("pFlip").classList.remove("open");
   $("pNext").classList.add("hidden");
+  $("pAddPhoto").classList.add("hidden");
   $("pNext").textContent = i === pgame.players.length - 1 ? "فهمت، خبّي ✔" : "فهمت، خبّي ومرّر ⬅";
 }
 $("pStart").onclick = passStart;
 // هاتف واحد: اضغط مطوّل باش تشوف، وكي تسيّب يبان زر "مرّر"
 holdToShow($("pFlip"),
   () => $("pFlip").classList.add("open"),
-  () => { $("pFlip").classList.remove("open"); $("pNext").classList.remove("hidden"); });
+  () => {
+    $("pFlip").classList.remove("open"); $("pNext").classList.remove("hidden");
+    // زيد صورة للكلمة وسط اللعب (غير للي ماشي محتال، وغير إذا ما عندهاش صورة)
+    const canAdd = pgame && !pgame.imps.includes(pgame.turn) && !pgame.photo;
+    $("pAddPhoto").classList.toggle("hidden", !canAdd);
+  });
+$("pAddPhoto").onclick = async () => {
+  if(!pgame || pgame.photo || pgame.imps.includes(pgame.turn)) return;
+  const img = await addPhotoMidGame(pgame.cat.id, pgame.word);
+  if(img){ pgame.photo = pcfg.showDef === false ? null : img; passTurn(true); $("pAddPhoto").classList.add("hidden"); }
+};
 $("pNext").onclick = () => {
   $("pFlip").classList.remove("open"); $("pNext").classList.add("hidden");
   setTimeout(() => { pgame.turn++; if(pgame.turn >= pgame.players.length) show("s-pass-ready"); else passTurn(); }, 400);
@@ -395,7 +538,8 @@ function statLine(st){
 function showPlayerCard(p){
   if(!p) return;
   const st = cleanStats(p.stats);
-  $("pcAv").textContent = (p.name.trim()[0] || "؟"); $("pcAv").style.background = avColor(p.id);
+  setAvatarEl($("pcAv"), p.id, p.name);
+  $("pcRate").textContent = st.games ? `🏆 نسبة الربح: ${Math.round((st.imp + st.crew) / st.games * 100)}%` : "";
   $("pcNick").textContent = p.name + (p.host ? " 👑" : "");
   $("pcName").textContent = p.full ? "الاسم: " + p.full : "";
   $("pcImp").textContent = st.imp; $("pcCrew").textContent = st.crew; $("pcRight").textContent = st.right;
@@ -467,7 +611,10 @@ class HostRoom {
   constructor(name){
     this.players = [{ id: myId, name, online: true, host: true, full: profile ? profile.name : "", stats: getStats() }];
     this.sid = uid();   // رقم الغرفة باش الجولات ما يتحسبوش مرتين
-    this.settings = store.get("hostSettings", { imps: 1, hint: true, cats: CATS.map(c => c.id) });
+    this.settings = store.get("hostSettings", { imps: 1, hint: true, showDef: true, cats: CATS.map(c => c.id) });
+    if(this.settings.showDef === undefined) this.settings.showDef = true;
+    this.pfps = {};   // صور البروفايل تاع اللاعبين
+    if(myPfp){ this.pfps[myId] = myPfp; pfpCache[myId] = myPfp; }
     this.settings.cats = this.settings.cats.filter(catById);
     this.phase = "lobby";
     this.round = null;
@@ -480,6 +627,9 @@ class HostRoom {
   // من السيرفر
   onServer(m){
     if(m.t === "join"){
+      // رجع ولا دخل جديد: نعاودو نبعثولو صورة الكلمة وصور البروفايل
+      if(this.round && this.round.photoSent) this.round.photoSent.delete(m.id);
+      setTimeout(() => this.sendAllPfps(m.id), 300);
       const p = this.player(m.id);
       if(p){ p.online = true; p.name = m.name || p.name; }
       else { this.players.push({ id: m.id, name: (m.name || "لاعب").slice(0, 14), online: true }); toast("👋 " + (m.name || "لاعب") + " دخل للغرفة"); vibe(15); }
@@ -499,6 +649,10 @@ class HostRoom {
       if(d.a === "seen" && this.round && this.round.ids.includes(p.id) && !this.round.seen.includes(p.id)){ this.round.seen.push(p.id); this.sync(); }
       if(d.a === "vote") this.castVote(p.id, d.target, d.no);
       if(d.a === "me"){ p.full = String(d.full || "").slice(0, 20); p.stats = cleanStats(d.stats); this.sync(); }
+      if(d.a === "pfp"){
+        const ok = typeof d.data === "string" && d.data.startsWith("data:image/") && d.data.length < 80000;
+        this.setPfp(p.id, ok ? d.data : null);
+      }
       if(d.a === "bye"){ this.players = this.players.filter(x => x.id !== p.id); if(this.round) this.round.ids = this.round.ids.filter(x => x !== p.id); this.sync(); }
     }
   }
@@ -563,9 +717,27 @@ class HostRoom {
     const picked = pickWord(this.settings.cats);
     if(!picked){ toast("الفئات اللي اخترتها فارغة — زيد كلمات ✏️"); return; }
     const { cat, word } = picked;
-    this.round = { no: (this.round ? this.round.no : 0) + 1, ids, imps: shuffle(ids).slice(0, imps), word, cat: cat.id, seen: [], first: null };
+    const show = this.settings.showDef !== false;
+    this.round = { no: (this.round ? this.round.no : 0) + 1, ids, imps: shuffle(ids).slice(0, imps), word, cat: cat.id, seen: [], first: null,
+      def: show ? getDef(cat.id, word) : "", photo: null, photoSent: new Set() };
     this.phase = "card";
     this.sync();
+    // صورة الكلمة من هاتف القائد
+    if(show){ const r = this.round; getPhoto(cat.id, word).then(p => { if(p && this.round === r){ r.photo = p; r.photoSent.clear(); this.sync(); } }); }
+  }
+  // القائد زاد صورة وسط اللعب: تبان عند الجميع
+  setRoundPhoto(img){
+    const r = this.round; if(!r || this.settings.showDef === false) return;
+    r.photo = img; r.photoSent.clear(); this.sync();
+  }
+  // صور البروفايل: نبعثوهم مرة وحدة برك (ماشي مع كل تحديث)
+  setPfp(id, data){
+    if(data) this.pfps[id] = data; else delete this.pfps[id];
+    for(const p of this.players) if(!p.host && p.online) net.send({ to: p.id, d: { type: "pfp", id, data: data || null } });
+    pfpCache[id] = data || null; this.sync();
+  }
+  sendAllPfps(to){
+    for(const [id, data] of Object.entries(this.pfps)) net.send({ to, d: { type: "pfp", id, data } });
   }
   pickFirst(){ this.round.first = this.round.ids[rnd(this.round.ids.length)]; this.round.tie = null; this.phase = "first"; this.sync(); }
   reveal(){ this.phase = "reveal"; this.sync(); }
@@ -590,7 +762,14 @@ class HostRoom {
         no: r.no, inRound, count: r.ids.length, seen: r.seen.length, pids: r.ids.slice(),
         names: r.ids.map(id => (this.player(id) || {}).name || "؟"),
         firstIdx: r.first ? r.ids.indexOf(r.first) : -1,
-        me: inRound ? { isImp: r.imps.includes(pid), word: r.imps.includes(pid) ? null : r.word, catName: cat.name, hint: this.settings.hint } : null,
+        me: inRound ? (() => {
+          const imp = r.imps.includes(pid);
+          const me = { isImp: imp, word: imp ? null : r.word, catName: cat.name, catId: imp ? null : r.cat, hint: this.settings.hint,
+            def: imp ? "" : (r.def || ""), hasPhoto: !imp && !!r.photo };
+          // الصورة تتبعث مرة وحدة لكل لاعب (المحتال ما ياخذهاش)
+          if(!imp && r.photo && !r.photoSent.has(pid)){ me.photo = r.photo; r.photoSent.add(pid); }
+          return me;
+        })() : null,
         reveal: this.phase === "reveal" ? { imps: r.imps.map(id => (this.player(id) || {}).name || "؟"), word: r.word,
           impIdx: r.imps.map(id => r.ids.indexOf(id)),
           result: r.result ? { winner: r.result.winner, topIdx: r.ids.indexOf(r.result.top), counts: r.result.counts,
@@ -703,13 +882,14 @@ function joinRoom(ip, port){
   const url = `ws://${ip}:${port}/?role=player&id=${myId}&name=${encodeURIComponent(name)}`;
   net = new Link(url, m => {
     if(m.t === "msg" && m.d && m.d.type === "state"){ gotState = true; onState(m.d.s); }
+    else if(m.t === "msg" && m.d && m.d.type === "pfp"){ pfpCache[m.d.id] = m.d.data || null; if(lastState) refreshAvatars(); }
     else if(m.t === "kicked"){ leaveRoom(false); toast("القائد خرّجك من الغرفة 😅"); }
     else if(m.t === "hostgone"){ leaveRoom(false); toast("القائد سكّر الغرفة"); }
   }, st => {
     if(st === "dead" && !gotState){ leaveRoom(false); toast("ما قدرناش ندخلو للغرفة. تأكد أنكم في نفس الواي فاي"); show("s-w-find"); }
     else connStatus(st);
-    // نبعثو الاسم والإحصائيات للقائد (حتى بعد إعادة الاتصال)
-    if(st === "up") sendMe();
+    // نبعثو الاسم والإحصائيات والصورة للقائد (حتى بعد إعادة الاتصال)
+    if(st === "up"){ sendMe(); if(net) net.send({ d: { a: "pfp", data: myPfp || null } }); }
   });
   keepAwake(true);
   toast("⏳ نتصلو بالغرفة…");
@@ -768,11 +948,11 @@ function renderLobby(s){
   const online = s.players.filter(p => p.online);
   $("wPlayersInfo").textContent = online.length < 3 ? `لازم ${3 - online.length} آخرين على الأقل` : `${online.length} لاعبين جاهزين`;
   const list = $("wPlayers");
-  const key = isHost + "|" + s.players.map(p => p.id + p.online + p.name + JSON.stringify(p.stats)).join("|");
+  const key = isHost + "|" + s.players.map(p => p.id + p.online + p.name + JSON.stringify(p.stats) + (pfpCache[p.id] ? "i" : "")).join("|");
   if(list.dataset.key !== key){
     list.dataset.key = key;
     list.innerHTML = s.players.map(p => `<div class="pl ${p.online ? "" : "off"}" data-pid="${p.id}">
-      <span class="av" style="background:${avColor(p.id)}">${esc(p.name.trim()[0] || "؟")}</span>
+      ${avatarHTML(p.id, p.name)}
       <span class="n">${esc(p.name)}${p.id === myId ? " (أنت)" : ""}<span class="stats-mini">${statLine(p.stats)}</span></span>
       <span class="tag">${p.host ? "👑 القائد" : p.online ? "" : "غير متصل"}</span>
       ${isHost && !p.host ? `<button class="kick" data-kick="${p.id}">✕</button>` : ""}</div>`).join("");
@@ -790,6 +970,7 @@ function renderLobby(s){
   if(isHost){
     $("wSettings").querySelectorAll("[data-wimps]").forEach(b => b.onclick = () => room.setSettings(st => st.imps = Math.min(s.maxImps, Math.max(1, st.imps + +b.dataset.wimps))));
     $("wSettings").querySelector("[data-whint]").onclick = () => room.setSettings(st => st.hint = !st.hint);
+    $("wSettings").querySelector("[data-wdef]").onclick = () => room.setSettings(st => st.showDef = st.showDef === false);
   }
   renderCatGrid($("wCats"), s.settings.cats, isHost ? id => room.setSettings(st => st.cats = st.cats.includes(id) ? st.cats.filter(x => x !== id) : [...st.cats, id]) : null);
   $("wStart").disabled = online.length < 3 || !s.settings.cats.length;
@@ -799,16 +980,25 @@ function renderRound(s){
   const r = s.round;
   // جولة جديدة: نرجع البطاقة مقلوبة
   if(shownRound !== r.no){
-    shownRound = r.no; seenSent = 0;
+    shownRound = r.no; seenSent = 0; roundPhoto = null; localPhoto = null;
     $("wFlip").innerHTML = cardHTML(); $("wFlip").classList.remove("open");
     $("peekPop").classList.add("hidden");
     $("wSpin").textContent = ""; $("wRule").classList.add("hidden");
     if(s.phase === "card") vibe([20, 30, 20]);
   }
-  fillCard($("wFlip"), { ...r.me, againText: "سيّب صبعك باش تخبّيها" });
+  // صورة الكلمة من القائد (تجي مرة وحدة) ولا اللي زدتها انت
+  if(r.me.photo) roundPhoto = r.me.photo;
+  const photo = r.me.isImp ? null : (roundPhoto || localPhoto);
+  fillCard($("wFlip"), { ...r.me, photo, againText: "سيّب صبعك باش تخبّيها" });
   // كلمتي تبقى متاحة طول الجولة (ضغط مطوّل)
   $("peekCat").textContent = "الفئة: " + (r.me.isImp && !r.me.hint ? "؟" : r.me.catName);
   $("peekWord").textContent = r.me.isImp ? "أنت المحتال 🤫" : r.me.word;
+  $("peekDef").textContent = r.me.isImp ? "" : (r.me.def || "");
+  $("peekDef").classList.toggle("hidden", r.me.isImp || !r.me.def);
+  if(photo){ $("peekImg").src = photo; $("peekImg").classList.remove("hidden"); } else $("peekImg").classList.add("hidden");
+  // زر "زيد صورة" وسط اللعب: غير للي ماشي محتال، وغير إذا الكلمة ما عندهاش صورة
+  const canAdd = !r.me.isImp && !photo && !r.me.hasPhoto && s.settings.showDef !== false && (s.phase === "card" || s.phase === "first");
+  document.querySelectorAll("[data-addphoto]").forEach(b => b.classList.toggle("hidden", !canAdd));
   $("wSeen").textContent = `👀 شافو كلمتهم: ${r.seen} / ${r.count}`;
   $("wFirst").textContent = r.seen >= r.count ? "الكل شاف! شكون يبدأ؟ 🎲" : `شكون يبدأ؟ 🎲 (${r.seen}/${r.count} شافو)`;
 
@@ -889,6 +1079,17 @@ $("wFirst").onclick = async () => {
 };
 $("wReveal").onclick = async () => { if(room && await ask("متأكدين؟ رايح يبان المحتال والكلمة عند الكل.")) room.reveal(); };
 
+// زيد صورة للكلمة وسط اللعب (أونلاين)
+let roundPhoto = null, localPhoto = null;
+document.querySelectorAll("[data-addphoto]").forEach(b => b.onclick = async () => {
+  const r = lastState && lastState.round;
+  if(!r || !r.me || r.me.isImp || !r.me.catId) return;
+  const img = await addPhotoMidGame(r.me.catId, r.me.word);
+  if(!img) return;
+  if(isHost && room) room.setRoundPhoto(img);       // القائد: تبان عند الجميع
+  else { localPhoto = img; onState(lastState); }   // لاعب: تتسجل في هاتفو
+});
+
 // ----- شاشة التصويت -----
 let votePick = -1, voteShownNo = 0;
 function renderVote(r){
@@ -899,11 +1100,11 @@ function renderVote(r){
   const top = Math.max(...v.counts);
   const list = $("wVoteList");
   const pl = i => lastState.players.find(p => p.id === (r.pids || [])[i]);
-  const key = r.names.join("|") + "|" + (r.pids || []).map(id => JSON.stringify((lastState.players.find(p => p.id === id) || {}).stats)).join("|");
+  const key = r.names.join("|") + "|" + (r.pids || []).map(id => JSON.stringify((lastState.players.find(p => p.id === id) || {}).stats) + (pfpCache[id] ? "i" : "")).join("|");
   if(list.dataset.key !== key){
     list.dataset.key = key;
     list.innerHTML = r.names.map((n, i) => { const p = pl(i); return `<button class="vopt ${i === v.myIdx ? "me" : ""}" data-i="${i}" style="animation-delay:${i * 0.05}s">
-      <span class="bar"></span><span class="av" style="background:${avColor(p ? p.id : n + i)}">${esc(n.trim()[0] || "؟")}</span>
+      <span class="bar"></span>${avatarHTML(p ? p.id : n + i, n)}
       <span class="n">${esc(n)}${i === v.myIdx ? " (أنت)" : ""}<span class="stats-mini">${statLine(p && p.stats)}</span></span>
       <span class="info" data-info="${i}" aria-label="بطاقة اللاعب">👤</span><span class="vc">0</span></button>`; }).join("");
     list.querySelectorAll(".vopt").forEach(b => b.onclick = e => {
@@ -950,7 +1151,10 @@ document.querySelector('[data-allcats="wifi"]').onclick = () => room && room.set
 // ============================================================
 let editCat = null;
 function saveEdits(){
-  for(const k in wordEdits) if(!wordEdits[k].added.length && !wordEdits[k].removed.length) delete wordEdits[k];
+  for(const k in wordEdits){
+    const e = wordEdits[k];
+    if(!e.added.length && !e.removed.length && !Object.keys(e.defs || {}).length) delete wordEdits[k];
+  }
   store.set("wordEdits", wordEdits); applyEdits();
 }
 function renderWordCats(){
@@ -979,9 +1183,13 @@ function renderWordList(){
   const words = visibleWords();
   for(const w of [...picked]) if(!c.list.includes(w)) picked.delete(w);
   $("wcCount").textContent = c.list.length;
-  $("wcList").innerHTML = words.length ? words.map(w => `<div class="wrow ${picked.has(w) ? "sel" : ""}" data-w="${esc(w)}"><span class="ck"></span><span class="w">${esc(w)}</span>${e.added.includes(w) ? `<span class="new">جديدة</span>` : ""}</div>`).join("")
+  $("wcList").innerHTML = words.length ? words.map(w => `<div class="wrow ${picked.has(w) ? "sel" : ""}" data-w="${esc(w)}"><span class="ck"></span>
+      <span class="w">${esc(w)}<small>${esc(getDef(c.id, w) || "— بلا تعريف")}</small></span>
+      ${hasPhoto(c.id, w) ? `<span class="ph">📷</span>` : ""}${(e.added || []).includes(w) ? `<span class="new">جديدة</span>` : ""}
+      <button class="edit" data-edit="${esc(w)}" aria-label="تعديل">✏️</button></div>`).join("")
     : `<div class="small" style="text-align:center;padding:16px">${$("wcSearch").value.trim() ? "ما لقينا حتى كلمة" : "الفئة فارغة — زيد كلمات!"}</div>`;
-  $("wcList").querySelectorAll(".wrow").forEach(row => row.onclick = () => {
+  $("wcList").querySelectorAll(".wrow").forEach(row => row.onclick = ev => {
+    if(ev.target.closest("[data-edit]")){ openWordSheet(row.dataset.w); return; }
     const w = row.dataset.w;
     if(picked.has(w)) picked.delete(w); else picked.add(w);
     row.classList.toggle("sel", picked.has(w)); vibe(8); updateSelBar();
@@ -1010,28 +1218,73 @@ $("wcDel").onclick = async () => {
   for(const w of picked){
     if(ed.added.includes(w)) ed.added = ed.added.filter(x => x !== w);
     else if(!ed.removed.includes(w)) ed.removed.push(w);
+    // الكلمة تتمسح مع تعريفها وصورتها
+    delete ed.defs[w];
+    if(photoIndex.has(photoKey(editCat.id, w))) deletePhoto(editCat.id, w);
   }
   picked.clear(); saveEdits(); renderWordList();
   toast(`🗑️ تنحّاو ${n} ${n === 1 ? "كلمة" : "كلمات"}`); vibe(20);
 };
 // يزيد كلمة لفئة (يرجّع true إذا تزادت فعلاً)
-function addToCat(catId, raw){
+function addToCat(catId, raw, rawDef){
   const w = String(raw).trim().replace(/\s+/g, " ").slice(0, 30);
+  const def = String(rawDef || "").trim().replace(/\s+/g, " ").slice(0, 80);
   const c = catById(catId); if(!w || !c) return false;
   if(c.list.includes(w)) return false;
   const ed = catEdits(catId);
   if(ed.removed.includes(w)) ed.removed = ed.removed.filter(x => x !== w);   // كانت أصلية ونحّيناها
   else ed.added.unshift(w);
+  if(def) ed.defs[w] = def;
   c.list.unshift(w);
   return true;
 }
-function addWord(){
+let newWordPhoto = null;
+$("wcNewPhoto").onclick = async () => {
+  const img = await pickImage(480); if(!img) return;
+  newWordPhoto = img; $("wcNewPhotoPrev").src = img; $("wcNewPhotoPrev").classList.remove("hidden");
+};
+async function addWord(){
   const w = $("wcNew").value.trim().replace(/\s+/g, " ");
-  if(!w) return;
-  if(!addToCat(editCat.id, w)){ toast("الكلمة موجودة ✔"); return; }
-  saveEdits(); $("wcNew").value = ""; $("wcNew").focus();
+  const def = $("wcNewDef").value.trim().replace(/\s+/g, " ");
+  if(!w){ toast("اكتب الكلمة ✍️"); $("wcNew").focus(); return; }
+  if(def.length < 3){ toast("لازم تكتب تعريف للكلمة 📝"); $("wcNewDef").focus(); return; }
+  if(!addToCat(editCat.id, w, def)){ toast("الكلمة موجودة ✔"); return; }
+  if(newWordPhoto) await savePhoto(editCat.id, w, newWordPhoto);
+  saveEdits();
+  $("wcNew").value = ""; $("wcNewDef").value = ""; newWordPhoto = null; $("wcNewPhotoPrev").classList.add("hidden");
+  $("wcNew").focus();
   toast("✅ تزادت: " + w); vibe(15); renderWordList();
 }
+
+// ----- تعديل كلمة: التعريف والصورة -----
+let wsWord = null, wsPhotoNew = undefined;   // undefined = ما تبدلتش، null = تنحّات
+async function openWordSheet(w){
+  wsWord = w; wsPhotoNew = undefined;
+  $("wsWord").textContent = w;
+  $("wsDef").value = getDef(editCat.id, w);
+  showWsPhoto(await getPhoto(editCat.id, w));
+  $("wordSheet").classList.remove("hidden");
+}
+function showWsPhoto(p){
+  $("wsPhoto").classList.toggle("hidden", !p); if(p) $("wsPhoto").src = p;
+  $("wsNoPhoto").classList.toggle("hidden", !!p);
+  $("wsDelPhoto").classList.toggle("hidden", !p);
+  $("wsPick").textContent = p ? "📷 بدّل الصورة" : "📷 اختار صورة";
+}
+function closeWordSheet(){ $("wordSheet").classList.add("hidden"); wsWord = null; }
+$("wsPick").onclick = async () => { const img = await pickImage(480); if(img){ wsPhotoNew = img; showWsPhoto(img); } };
+$("wsDelPhoto").onclick = () => { wsPhotoNew = null; showWsPhoto(null); };
+$("wsClose").onclick = closeWordSheet;
+$("wsSave").onclick = async () => {
+  const w = wsWord; if(!w) return;
+  const def = $("wsDef").value.trim().replace(/\s+/g, " ").slice(0, 80);
+  if(def.length < 3){ toast("لازم تعريف للكلمة 📝"); return; }
+  const ed = catEdits(editCat.id), base = editCat.defs[w];
+  if(def === base) delete ed.defs[w]; else ed.defs[w] = def;
+  if(wsPhotoNew === null) await deletePhoto(editCat.id, w);
+  else if(wsPhotoNew) await savePhoto(editCat.id, w, wsPhotoNew);
+  saveEdits(); closeWordSheet(); renderWordList(); toast("✅ تسجل"); vibe(15);
+};
 
 // ----- مشاركة الكلمات مع الصحاب -----
 // الكود فيه غير الكلمات اللي زادها المستعمل (ماشي كلمات اللعبة الأصلية)
@@ -1061,7 +1314,7 @@ let sheetAction = null;
 function openSheet({ title, info, text, main, paste, onMain }){
   $("shTitle").textContent = title; $("shInfo").textContent = info;
   $("shText").value = text || ""; $("shText").readOnly = !paste;
-  $("shText").placeholder = paste ? "الصق الكود تاع صاحبك هنا (ولا اكتب كلمات، كل كلمة في سطر)" : "";
+  $("shText").placeholder = paste ? "الصق الكود تاع صاحبك هنا\nولا اكتب: كلمة = تعريف (كل كلمة في سطر)" : "";
   $("shMain").textContent = main; $("shPaste").classList.toggle("hidden", !paste);
   sheetAction = onMain;
   $("sheet").classList.remove("hidden");
@@ -1083,22 +1336,32 @@ function openShare(obj, label){
 // intoCat: نزيدو كل الكلمات لفئة وحدة (من شاشة الفئة)، ولا كل كلمة لفئتها (من شاشة الفئات)
 function importWords(text, intoCat){
   const obj = decodeWords(text);
-  let lists;
+  let lists, skipped = 0;
   if(obj) lists = obj.c;
   else {
-    // نص عادي: كل كلمة في سطر ولا بين فاصلات
-    const words = String(text).split(/[\n,،]+/).map(s => s.trim()).filter(Boolean);
-    if(!words.length){ toast("الصق الكود تاع صاحبك أولاً"); return 0; }
+    // نص عادي: كل سطر "كلمة = تعريف" (ولا كلمة: تعريف)
+    const lines = String(text).split(/\n+/).map(s => s.trim()).filter(Boolean);
+    if(!lines.length){ toast("الصق الكود تاع صاحبك أولاً"); return 0; }
     if(!intoCat){ toast("هذا ماشي كود — ادخل لفئة والصق الكلمات فيها"); return 0; }
-    lists = { [intoCat]: words };
+    const pairs = [];
+    for(const l of lines){
+      const m = /^(.+?)\s*[=:]\s*(.{3,})$/.exec(l);
+      if(m) pairs.push([m[1], m[2]]); else skipped++;
+    }
+    lists = { [intoCat]: pairs };
   }
   let added = 0;
   for(const [cid, words] of Object.entries(lists)){
     const target = intoCat || cid;
     if(!catById(target) || !Array.isArray(words)) continue;
-    for(const w of words) if(addToCat(target, w)) added++;
+    // كل كلمة مع تعريفها: ["كلمة","تعريف"] (والكودات القديمة: "كلمة")
+    for(const it of words){
+      const [w, d] = Array.isArray(it) ? it : [it, ""];
+      if(addToCat(target, w, d)) added++;
+    }
   }
   saveEdits();
+  if(skipped) toast(`تخطينا ${skipped} سطر بلا تعريف — اكتب: كلمة = تعريف`);
   return added;
 }
 function openImport(intoCat){
@@ -1110,16 +1373,65 @@ function openImport(intoCat){
       if(n > 0){ closeSheet(); toast(`✅ تزادو ${n} كلمات من صاحبك`); vibe([20, 40, 20]); intoCat ? renderWordList() : renderWordCats(); }
     } });
 }
+// نشاركو الكلمة مع تعريفها (الصور تبقى في الهاتف)
+const withDefs = (catId, words) => words.map(w => [w, getDef(catId, w)]);
 $("wcShare").onclick = () => {
   const ed = wordEdits[editCat.id];
-  openShare({ v: 1, c: { [editCat.id]: ed ? ed.added.slice() : [] } }, "كلمات " + editCat.name);
+  openShare({ v: 2, c: { [editCat.id]: ed ? withDefs(editCat.id, ed.added) : [] } }, "كلمات " + editCat.name);
 };
 $("wcImport").onclick = () => openImport(editCat.id);
 $("shareAll").onclick = () => {
-  const c = {}; for(const [id, ed] of Object.entries(wordEdits)) if(ed.added.length) c[id] = ed.added.slice();
-  openShare({ v: 1, c }, "كل كلماتي");
+  const c = {}; for(const [id, ed] of Object.entries(wordEdits)) if(ed.added && ed.added.length) c[id] = withDefs(id, ed.added);
+  openShare({ v: 2, c }, "كل كلماتي");
 };
 $("importAll").onclick = () => openImport(null);
+
+// ----- تصدير / استرجاع البيانات (كلمات + تعريفات + صور) -----
+const FS = NATIVE ? getPlugin("Filesystem") : null;
+$("exportData").onclick = async () => {
+  const photos = {};
+  for(const k of await photoDB.keys()){ const v = await photoDB.get(k); if(v) photos[k] = v; }
+  const data = { app: "mohtal", v: 1, date: new Date().toISOString(), by: profile ? profile.nick : "", wordEdits, photos };
+  const json = JSON.stringify(data);
+  const nWords = Object.values(wordEdits).reduce((s, e) => s + (e.added ? e.added.length : 0), 0);
+  const name = `mohtal-data-${new Date().toISOString().slice(0, 10)}.json`;
+  try{
+    if(FS && SHARE){
+      const r = await FS.writeFile({ path: name, data: json, directory: "CACHE", encoding: "utf8" });
+      await SHARE.share({ title: "بيانات شكون المحتال؟", files: [r.uri], dialogTitle: "احفظ ولا ابعث الملف" });
+    } else {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+      a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    }
+    toast(`📦 تصدّرو ${nWords} كلمة و ${Object.keys(photos).length} صورة`);
+  }catch(e){ if(!String(e && e.message).match(/cancel/i)) toast("ما قدرناش نصدرو الملف"); }
+};
+$("importData").onclick = () => {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = ".json,application/json";
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0]; if(!f) return;
+    let data; try{ data = JSON.parse(await f.text()); }catch(e){ toast("الملف ماشي صحيح"); return; }
+    if(!data || data.app !== "mohtal"){ toast("هذا ماشي ملف تاع شكون المحتال؟"); return; }
+    if(!await ask("نزيدو الكلمات والتعريفات والصور اللي في الملف لهاتفك؟")) return;
+    let nw = 0, np = 0;
+    for(const [cid, e] of Object.entries(data.wordEdits || {})){
+      if(!catById(cid)) continue;
+      const ed = catEdits(cid);
+      for(const w of e.added || []) if(addToCat(cid, w, (e.defs || {})[w])) nw++;
+      for(const w of e.removed || []) if(!ed.removed.includes(w)){ ed.removed.push(w); }
+      for(const [w, d] of Object.entries(e.defs || {})) if(!ed.defs[w]) ed.defs[w] = d;
+    }
+    for(const [k, v] of Object.entries(data.photos || {})){
+      if(typeof v === "string" && v.startsWith("data:image/") && !photoIndex.has(k)){ await photoDB.set(k, v); photoIndex.add(k); np++; }
+    }
+    saveEdits(); renderWordCats();
+    toast(`✅ ترجعو ${nw} كلمة و ${np} صورة`); vibe([20, 40, 20]);
+  };
+  inp.click();
+};
 $("goWords").onclick = () => { renderWordCats(); show("s-words"); };
 $("wordsBack").onclick = () => { renderWordCats(); show("s-words"); };
 $("wcAdd").onclick = addWord;
@@ -1127,7 +1439,9 @@ $("wcNew").onkeydown = e => { if(e.key === "Enter") addWord(); };
 $("wcSearch").oninput = renderWordList;
 $("wordsBack").addEventListener("click", () => picked.clear());
 $("wcReset").onclick = async () => {
-  if(!await ask(`ترجّع الكلمات الأصلية تاع "${editCat.name}"؟ الكلمات اللي زدتها رايحين يتحاو.`)) return;
+  if(!await ask(`ترجّع الكلمات الأصلية تاع "${editCat.name}"؟ الكلمات اللي زدتها رايحين يتحاو مع تعريفاتهم وصورهم.`)) return;
+  const ed = wordEdits[editCat.id];
+  if(ed) for(const w of ed.added || []) if(photoIndex.has(photoKey(editCat.id, w))) await deletePhoto(editCat.id, w);
   delete wordEdits[editCat.id]; saveEdits(); renderWordList(); toast("↩️ رجعت الكلمات الأصلية");
 };
 
@@ -1136,6 +1450,7 @@ if(APP){
   APP.addListener("backButton", () => {
     if(!$("modal").classList.contains("hidden")){ $("mNo").click(); return; }
     if(!$("sheet").classList.contains("hidden")){ closeSheet(); return; }
+    if(!$("wordSheet").classList.contains("hidden")){ closeWordSheet(); return; }
     if(!$("pcard").classList.contains("hidden")){ closePlayerCard(); return; }
     const on = document.querySelector(".screen.on");
     if(!on || on.id === "s-home" || (on.id === "s-profile" && !hasProfile())) APP.exitApp();
