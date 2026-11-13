@@ -791,42 +791,170 @@ function renderWordCats(){
   }).join("");
   $("wcats").querySelectorAll(".wcat").forEach(b => b.onclick = () => openWordCat(b.dataset.id));
 }
+// الكلمات المحددة للحذف
+const picked = new Set();
 function openWordCat(id){
   editCat = catById(id);
+  picked.clear();
   $("wcTitle").textContent = editCat.icon + " " + editCat.name;
   $("wcNew").value = ""; $("wcSearch").value = "";
   renderWordList(); show("s-words-cat");
 }
+function visibleWords(){
+  const q = $("wcSearch").value.trim();
+  return editCat.list.filter(w => !q || w.includes(q));
+}
 function renderWordList(){
   const c = editCat, e = wordEdits[c.id] || { added: [], removed: [] };
-  const q = $("wcSearch").value.trim();
-  const words = c.list.filter(w => !q || w.includes(q));
+  const words = visibleWords();
+  for(const w of [...picked]) if(!c.list.includes(w)) picked.delete(w);
   $("wcCount").textContent = c.list.length;
-  $("wcList").innerHTML = words.length ? words.map(w => `<div class="wrow"><span class="w">${esc(w)}</span>${e.added.includes(w) ? `<span class="new">جديدة</span>` : ""}<button class="del" data-w="${esc(w)}" aria-label="نحّي">✕</button></div>`).join("")
-    : `<div class="small" style="text-align:center;padding:16px">${q ? "ما لقينا حتى كلمة" : "الفئة فارغة — زيد كلمات!"}</div>`;
-  $("wcList").querySelectorAll(".del").forEach(b => b.onclick = () => {
-    const w = b.dataset.w, ed = catEdits(c.id);
-    if(ed.added.includes(w)) ed.added = ed.added.filter(x => x !== w); else ed.removed.push(w);
-    b.parentElement.classList.add("out"); vibe(10);
-    setTimeout(() => { saveEdits(); renderWordList(); }, 220);
+  $("wcList").innerHTML = words.length ? words.map(w => `<div class="wrow ${picked.has(w) ? "sel" : ""}" data-w="${esc(w)}"><span class="ck"></span><span class="w">${esc(w)}</span>${e.added.includes(w) ? `<span class="new">جديدة</span>` : ""}</div>`).join("")
+    : `<div class="small" style="text-align:center;padding:16px">${$("wcSearch").value.trim() ? "ما لقينا حتى كلمة" : "الفئة فارغة — زيد كلمات!"}</div>`;
+  $("wcList").querySelectorAll(".wrow").forEach(row => row.onclick = () => {
+    const w = row.dataset.w;
+    if(picked.has(w)) picked.delete(w); else picked.add(w);
+    row.classList.toggle("sel", picked.has(w)); vibe(8); updateSelBar();
   });
   $("wcReset").classList.toggle("hidden", !wordEdits[c.id]);
+  updateSelBar();
+}
+function updateSelBar(){
+  const words = visibleWords();
+  const allOn = words.length > 0 && words.every(w => picked.has(w));
+  $("wcSelAll").textContent = allOn ? "✖️ إلغاء التحديد" : "☑️ تحديد الكل";
+  $("wcSelInfo").textContent = picked.size ? `محددين: ${picked.size}` : "اضغط على الكلمات باش تحددهم";
+  $("wcDel").classList.toggle("hidden", !picked.size);
+  $("wcDel").textContent = `🗑️ نحّي المحددين (${picked.size})`;
+}
+$("wcSelAll").onclick = () => {
+  const words = visibleWords();
+  const allOn = words.length > 0 && words.every(w => picked.has(w));
+  words.forEach(w => allOn ? picked.delete(w) : picked.add(w));
+  vibe(12); renderWordList();
+};
+$("wcDel").onclick = async () => {
+  const n = picked.size; if(!n) return;
+  if(!await ask(`تنحّي ${n} ${n === 1 ? "كلمة" : "كلمات"} من "${editCat.name}"؟`)) return;
+  const ed = catEdits(editCat.id);
+  for(const w of picked){
+    if(ed.added.includes(w)) ed.added = ed.added.filter(x => x !== w);
+    else if(!ed.removed.includes(w)) ed.removed.push(w);
+  }
+  picked.clear(); saveEdits(); renderWordList();
+  toast(`🗑️ تنحّاو ${n} ${n === 1 ? "كلمة" : "كلمات"}`); vibe(20);
+};
+// يزيد كلمة لفئة (يرجّع true إذا تزادت فعلاً)
+function addToCat(catId, raw){
+  const w = String(raw).trim().replace(/\s+/g, " ").slice(0, 30);
+  const c = catById(catId); if(!w || !c) return false;
+  if(c.list.includes(w)) return false;
+  const ed = catEdits(catId);
+  if(ed.removed.includes(w)) ed.removed = ed.removed.filter(x => x !== w);   // كانت أصلية ونحّيناها
+  else ed.added.unshift(w);
+  c.list.unshift(w);
+  return true;
 }
 function addWord(){
   const w = $("wcNew").value.trim().replace(/\s+/g, " ");
   if(!w) return;
-  const c = editCat, ed = catEdits(c.id);
-  if(c.list.includes(w)){ toast("الكلمة موجودة ✔"); return; }
-  if(ed.removed.includes(w)) ed.removed = ed.removed.filter(x => x !== w);   // كانت أصلية ونحّيناها
-  else ed.added.unshift(w);
+  if(!addToCat(editCat.id, w)){ toast("الكلمة موجودة ✔"); return; }
   saveEdits(); $("wcNew").value = ""; $("wcNew").focus();
   toast("✅ تزادت: " + w); vibe(15); renderWordList();
 }
+
+// ----- مشاركة الكلمات مع الصحاب -----
+// الكود فيه غير الكلمات اللي زادها المستعمل (ماشي كلمات اللعبة الأصلية)
+const CODE_RE = /#MOHTAL1#([A-Za-z0-9_\-]+)/;
+function encodeWords(obj){
+  const b = btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+  return b.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function decodeWords(text){
+  const m = CODE_RE.exec(text || ""); if(!m) return null;
+  try{
+    let b = m[1].replace(/-/g, "+").replace(/_/g, "/"); while(b.length % 4) b += "=";
+    const o = JSON.parse(decodeURIComponent(escape(atob(b))));
+    return o && typeof o.c === "object" ? o : null;
+  }catch(e){ return null; }
+}
+function shareText(obj, label){
+  const total = Object.values(obj.c).reduce((s, a) => s + a.length, 0);
+  return `شكون المحتال؟ ✏️ ${label} (${total} كلمة)\nافتح اللعبة ← تعديل الكلمات ← 📥 كلمات صاحبي، والصق هذا:\n#MOHTAL1#${encodeWords(obj)}`;
+}
+async function copyText(t){
+  try{ await navigator.clipboard.writeText(t); return true; }catch(e){}
+  try{ const ta = $("shText"); ta.focus(); ta.select(); return document.execCommand("copy"); }catch(e){ return false; }
+}
+let sheetAction = null;
+function openSheet({ title, info, text, main, paste, onMain }){
+  $("shTitle").textContent = title; $("shInfo").textContent = info;
+  $("shText").value = text || ""; $("shText").readOnly = !paste;
+  $("shText").placeholder = paste ? "الصق الكود تاع صاحبك هنا (ولا اكتب كلمات، كل كلمة في سطر)" : "";
+  $("shMain").textContent = main; $("shPaste").classList.toggle("hidden", !paste);
+  sheetAction = onMain;
+  $("sheet").classList.remove("hidden");
+}
+function closeSheet(){ $("sheet").classList.add("hidden"); sheetAction = null; }
+$("shClose").onclick = closeSheet;
+$("shMain").onclick = () => sheetAction && sheetAction($("shText").value);
+$("shPaste").onclick = async () => {
+  try{ const t = await navigator.clipboard.readText(); if(t){ $("shText").value = t; return; } }catch(e){}
+  $("shText").focus(); toast("اضغط مطوّل في المربع واختار لصق");
+};
+function openShare(obj, label){
+  const total = Object.values(obj.c).reduce((s, a) => s + a.length, 0);
+  if(!total){ toast("ما زدت حتى كلمة باش تشاركها ✏️"); return; }
+  const text = shareText(obj, label);
+  openSheet({ title: "📤 شارك كلماتك", info: `فيه ${total} كلمة زدتهم انت. انسخ وابعثو لصاحبك (واتساب، ميسنجر…)`, text, main: "📋 انسخ", paste: false,
+    onMain: async t => { toast(await copyText(t) ? "✅ تنسخ! ابعثو لصاحبك" : "انسخ النص يدوياً"); } });
+}
+// intoCat: نزيدو كل الكلمات لفئة وحدة (من شاشة الفئة)، ولا كل كلمة لفئتها (من شاشة الفئات)
+function importWords(text, intoCat){
+  const obj = decodeWords(text);
+  let lists;
+  if(obj) lists = obj.c;
+  else {
+    // نص عادي: كل كلمة في سطر ولا بين فاصلات
+    const words = String(text).split(/[\n,،]+/).map(s => s.trim()).filter(Boolean);
+    if(!words.length){ toast("الصق الكود تاع صاحبك أولاً"); return 0; }
+    if(!intoCat){ toast("هذا ماشي كود — ادخل لفئة والصق الكلمات فيها"); return 0; }
+    lists = { [intoCat]: words };
+  }
+  let added = 0;
+  for(const [cid, words] of Object.entries(lists)){
+    const target = intoCat || cid;
+    if(!catById(target) || !Array.isArray(words)) continue;
+    for(const w of words) if(addToCat(target, w)) added++;
+  }
+  saveEdits();
+  return added;
+}
+function openImport(intoCat){
+  const where = intoCat ? `فئة "${catById(intoCat).name}"` : "الفئات تاعها";
+  openSheet({ title: "📥 زيد كلمات صاحبك", info: `الكلمات تتزاد لـ ${where}. الكلمات اللي عندك من قبل ما تتعاودش.`, text: "", main: "➕ زيد الكلمات", paste: true,
+    onMain: t => {
+      const n = importWords(t, intoCat);
+      if(n === 0 && (decodeWords(t) || t.trim())){ toast("كل الكلمات كانو عندك من قبل ✔"); return; }
+      if(n > 0){ closeSheet(); toast(`✅ تزادو ${n} كلمات من صاحبك`); vibe([20, 40, 20]); intoCat ? renderWordList() : renderWordCats(); }
+    } });
+}
+$("wcShare").onclick = () => {
+  const ed = wordEdits[editCat.id];
+  openShare({ v: 1, c: { [editCat.id]: ed ? ed.added.slice() : [] } }, "كلمات " + editCat.name);
+};
+$("wcImport").onclick = () => openImport(editCat.id);
+$("shareAll").onclick = () => {
+  const c = {}; for(const [id, ed] of Object.entries(wordEdits)) if(ed.added.length) c[id] = ed.added.slice();
+  openShare({ v: 1, c }, "كل كلماتي");
+};
+$("importAll").onclick = () => openImport(null);
 $("goWords").onclick = () => { renderWordCats(); show("s-words"); };
 $("wordsBack").onclick = () => { renderWordCats(); show("s-words"); };
 $("wcAdd").onclick = addWord;
 $("wcNew").onkeydown = e => { if(e.key === "Enter") addWord(); };
 $("wcSearch").oninput = renderWordList;
+$("wordsBack").addEventListener("click", () => picked.clear());
 $("wcReset").onclick = async () => {
   if(!await ask(`ترجّع الكلمات الأصلية تاع "${editCat.name}"؟ الكلمات اللي زدتها رايحين يتحاو.`)) return;
   delete wordEdits[editCat.id]; saveEdits(); renderWordList(); toast("↩️ رجعت الكلمات الأصلية");
@@ -836,6 +964,7 @@ $("wcReset").onclick = async () => {
 if(APP){
   APP.addListener("backButton", () => {
     if(!$("modal").classList.contains("hidden")){ $("mNo").click(); return; }
+    if(!$("sheet").classList.contains("hidden")){ closeSheet(); return; }
     const on = document.querySelector(".screen.on");
     if(!on || on.id === "s-home") APP.exitApp();
     else if(on.id === "s-w-find") document.querySelector("[data-wback]").click();

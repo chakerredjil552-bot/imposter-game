@@ -69,6 +69,10 @@
 <section class="screen" id="s-words">
   <div class="top"><button class="x" data-home>➜</button><span class="chip">✏️ تعديل الكلمات</span><span class="sp"></span></div>
   <div class="small info-box">اختار فئة باش تزيد ولا تنحّي كلمات. التعديلات تتسجل في هاتفك.<br>👑 في اللعب مع الصحاب، الكلمات تاع <b>القائد</b> هي اللي تُستعمل.</div>
+  <div class="share-row">
+    <button class="btn ghost small-btn" id="shareAll">📤 شارك كل كلماتي</button>
+    <button class="btn ghost small-btn" id="importAll">📥 كلمات صاحبي</button>
+  </div>
   <div class="wcats" id="wcats"></div>
 </section>
 
@@ -82,9 +86,20 @@
       <button class="btn small-btn" id="wcAdd">زيد</button>
     </div>
   </div>
+  <div class="share-row">
+    <button class="btn ghost small-btn" id="wcShare">📤 شارك كلماتي</button>
+    <button class="btn ghost small-btn" id="wcImport">📥 كلمات صاحبي</button>
+  </div>
   <input class="field search" id="wcSearch" placeholder="🔎 قلّب على كلمة">
+  <div class="sel-bar">
+    <button class="link" id="wcSelAll">☑️ تحديد الكل</button>
+    <span class="small" id="wcSelInfo">اضغط على الكلمات باش تحددهم</span>
+  </div>
   <div class="wlist" id="wcList"></div>
-  <div class="sticky"><button class="btn ghost hidden" id="wcReset">↩️ رجّع الكلمات الأصلية</button></div>
+  <div class="sticky">
+    <button class="btn red hidden" id="wcDel">🗑️ نحّي المحددين</button>
+    <button class="btn ghost hidden" id="wcReset">↩️ رجّع الكلمات الأصلية</button>
+  </div>
 </section>
 
 <!-- ===== هاتف واحد: الإعدادات ===== -->
@@ -274,6 +289,14 @@
 
 <!-- كلمتي: تبان غير وقت الضغط المطوّل -->
 <div class="peek-pop hidden" id="peekPop"><div class="peek-card"><div class="cat-l" id="peekCat"></div><div class="word" id="peekWord"></div><div class="hint">سيّب صبعك باش تخبّيها</div></div></div>
+<!-- مشاركة / استيراد الكلمات -->
+<div class="modal hidden" id="sheet"><div class="mbox sheet">
+  <div class="label" id="shTitle"></div>
+  <div class="small" id="shInfo"></div>
+  <textarea id="shText" rows="6" dir="auto"></textarea>
+  <button class="link hidden" id="shPaste">📋 لصق من الحافظة</button>
+  <div class="mbtns"><button class="btn" id="shMain"></button><button class="btn ghost" id="shClose">رجوع</button></div>
+</div></div>
 <div class="modal hidden" id="modal"><div class="mbox"><div id="mText"></div><div class="mbtns"><button class="btn red" id="mYes">إيه</button><button class="btn ghost" id="mNo">لا</button></div></div></div>
 <div class="toast" id="toast"></div>
 <div class="confetti" id="confetti"></div>

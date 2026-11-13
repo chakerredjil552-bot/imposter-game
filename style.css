@@ -179,7 +179,18 @@ h1 span,.title-xl span{color:var(--accent)}
 .wrow{display:flex;align-items:center;gap:8px;background:var(--card);border-radius:12px;padding:8px 10px 8px 6px}
 .wrow .w{flex:1;font-weight:700}
 .wrow .new{font-size:11px;font-weight:800;color:#1a1530;background:var(--ok);border-radius:8px;padding:1px 6px}
-.wrow .del{width:34px;height:34px;border-radius:10px;background:#3b2440;color:#ff8da0;font-weight:900;flex:none}
+.wrow{cursor:pointer;border:2px solid transparent;transition:background .15s,border-color .15s}
+.wrow .ck{width:24px;height:24px;border-radius:8px;border:2px solid var(--line);flex:none;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#1a1530;transition:.15s}
+.wrow.sel{background:#4a2440;border-color:var(--accent2)}
+.wrow.sel .ck{background:var(--accent2);border-color:var(--accent2);color:#fff}
+.wrow.sel .ck::after{content:"✓"}
+.sel-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 4px}
+.share-row{display:flex;gap:8px}
+.share-row .btn{flex:1;font-size:15px;padding:11px 8px}
+.sheet{text-align:right;display:flex;flex-direction:column;gap:10px}
+.sheet textarea{width:100%;background:var(--card);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:10px;font:inherit;font-size:14px;resize:vertical;user-select:text;-webkit-user-select:text}
+.sheet textarea:focus{outline:2px solid var(--accent);border-color:transparent}
+.sheet .mbtns{margin-top:4px}
 .wrow.out{animation:out .25s ease-in forwards}
 @keyframes out{to{opacity:0;transform:translateX(30px)}}
 /* التصويت */
