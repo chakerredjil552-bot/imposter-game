@@ -310,3 +310,11 @@ h1 span,.title-xl span{color:var(--accent)}
 .pl.fr .stats-mini{font-weight:700}
 #fMyCode{font-size:28px;letter-spacing:2px}
 #wOnlineSt{text-align:center}
+
+.pack-row button{font-size:14px}
+.pack-now{margin:8px 0 4px;padding:8px 12px;border-radius:12px;background:rgba(63,224,165,.12);border:1px solid rgba(63,224,165,.4);font-size:14px;font-weight:700;text-align:center}
+.pack-chip{font-size:13px;font-weight:800;padding:4px 12px;border-radius:12px;background:var(--bg2);border:1px solid var(--line);color:var(--accent)}
+.pack-chip:empty{display:none}
+.orig-panel{border:1px dashed var(--line)}
+.orig-cats{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.orig-cats .chip{font-size:12px}

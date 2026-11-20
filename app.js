@@ -79,7 +79,33 @@ function avColor(id){ let h = 0; for(const c of String(id)) h = (h * 31 + c.char
 // ---------- الكلمات ----------
 const CATS = RAW_CATEGORIES.map(c => ({ id: c.id, icon: c.icon, name: c.name.replace(" 🇩🇿", ""),
   base: [...new Set(c.words.split("\n").map(s => s.trim()).filter(Boolean))], list: [] }));
-const catById = id => CATS.find(c => c.id === id);
+const catById = id => CATS.find(c => c.id === id) || ORIG_CATS.find(c => c.id === id);
+// ----- باقات الكلمات -----
+// 🤖 كلمات Claude: اللي جات مع اللعبة • 📦 الكلمات الأصلية: يزيدها صاحب الهاتف من ملف (تبقى في هاتفو برك)
+// في الغرفة، الكلمات تتختار في هاتف القائد: اللاعبين ما يحتاجوش الباقة
+const PACKS = { claude: "🤖 كلمات Claude", orig: "📦 الكلمات الأصلية" };
+let ORIG_CATS = [];
+function loadOrig(){
+  const p = store.get("origPack", null);
+  ORIG_CATS = !p || !Array.isArray(p.cats) ? [] : p.cats.map((c, i) => {
+    const base = [...new Set((c.words || []).map(w => String(w).trim().replace(/\s+/g, " ")).filter(w => w && w.length <= 40))];
+    return { id: "o" + i, icon: String(c.icon || "📦").slice(0, 4), name: String(c.name || "فئة " + (i + 1)).slice(0, 30), base, list: base.slice(), defs: {}, orig: true };
+  }).filter(c => c.list.length);
+}
+loadOrig();
+const hasOrig = () => ORIG_CATS.length > 0;
+const packOf = st => st && st.pack === "orig" && hasOrig() ? "orig" : "claude";
+const packCats = p => p === "orig" && hasOrig() ? ORIG_CATS : CATS;
+const packWords = p => packCats(p).reduce((n, c) => n + c.list.length, 0);
+const packInfo = p => ({ pack: p, n: packWords(p), cats: packCats(p).map(c => ({ id: c.id, name: c.name, icon: c.icon })) });
+// الفئات المختارة لازم يكونو من نفس الباقة
+function fixPackCats(st){
+  const p = packOf(st); st.pack = p;
+  const ids = packCats(p).map(c => c.id);
+  st.cats = (st.cats || []).filter(id => ids.includes(id));
+  if(!st.cats.length) st.cats = ids.slice();
+  return st;
+}
 // التعريفات الأصلية لكل كلمة
 for(const c of CATS){
   c.defs = {};
@@ -131,9 +157,10 @@ function applyEdits(){
   }
 }
 applyEdits();
-function pickWord(catIds){
-  const pool = catIds.map(catById).filter(c => c && c.list.length);
-  const cats = pool.length ? pool : CATS.filter(c => c.list.length);
+function pickWord(catIds, pack){
+  const all = packCats(pack || "claude");
+  const pool = catIds.map(catById).filter(c => c && c.list.length && all.includes(c));
+  const cats = pool.length ? pool : all.filter(c => c.list.length);
   if(!cats.length) return null;
   // اختيار فئة حسب عدد كلماتها
   let total = cats.reduce((s, c) => s + c.list.length, 0), r = rnd(total), cat = cats[0];
@@ -145,14 +172,14 @@ function pickWord(catIds){
   used.push(word); store.set("used_" + cat.id, used);
   return { cat, word };
 }
-function catsLabel(ids){
-  if(!ids.length || ids.length === CATS.length) return "🎲 كل الفئات";
+function catsLabel(ids, pack){
+  if(!ids.length || ids.length === packCats(pack || "claude").length) return "🎲 كل الفئات";
   if(ids.length === 1){ const c = catById(ids[0]); return c.icon + " " + c.name; }
   return "🎲 " + ids.length + " فئات";
 }
-function renderCatGrid(el, selected, onToggle){
+function renderCatGrid(el, selected, onToggle, list){
   el.classList.toggle("readonly", !onToggle);
-  el.innerHTML = CATS.map(c => `<button class="cat ${selected.includes(c.id) ? "sel" : ""}" data-id="${c.id}"><span class="ic">${c.icon}</span><span class="nm">${esc(c.name)}</span></button>`).join("");
+  el.innerHTML = (list || CATS).map(c => `<button class="cat ${selected.includes(c.id) ? "sel" : ""}" data-id="${c.id}"><span class="ic">${c.icon}</span><span class="nm">${esc(c.name)}</span></button>`).join("");
   if(onToggle) el.querySelectorAll(".cat").forEach(b => b.onclick = () => { vibe(8); onToggle(b.dataset.id); });
 }
 
@@ -377,11 +404,21 @@ $("wEditName").onclick = () => showProfile(false, openWifi);
 //   وضع الهاتف الواحد
 // ============================================================
 let pcfg = store.get("passCfg", { players: 4, imps: 1, hint: true, names: [], cats: CATS.map(c => c.id) });
-pcfg.cats = (pcfg.cats || []).filter(catById);
+fixPackCats(pcfg);
+// تبديل الباقة (هاتف واحد ولا القائد)
+function choosePack(p, apply){
+  if(p === "orig" && !hasOrig()){ toast("📦 ما زدتش الكلمات الأصلية — زيدها من ✏️ تعديل الكلمات"); return; }
+  apply(st => { st.pack = p; st.cats = packCats(p).map(c => c.id); });
+  toast("✅ رايح نستعملو: " + PACKS[p]); vibe(15);
+}
 let pgame = null;
 const pMaxImps = () => Math.max(1, Math.floor((pcfg.players - 1) / 2));
-function settingsHTML(prefix, s, editable, maxI){
-  return `<div class="row set-row"><div><div class="label">عدد المحتالين</div><div class="small">يتم اختيارهم عشوائياً</div></div>
+function settingsHTML(prefix, s, editable, info){
+  const cur = info ? info.pack : packOf(s), n = info ? info.n : packWords(cur);
+  return `<div class="label">📚 الكلمات اللي نلعبو بيها</div>
+    <div class="pick-row pack-row">${["claude", "orig"].map(p => `<button type="button" ${editable ? "" : "disabled"} class="${cur === p ? "on" : ""}" data-${prefix}pack="${p}">${PACKS[p]}</button>`).join("")}</div>
+    <div class="pack-now">✅ رايح نستعملو: <b>${PACKS[cur]}</b> — ${n.toLocaleString("en")} كلمة</div>
+    <div class="row set-row"><div><div class="label">عدد المحتالين</div><div class="small">يتم اختيارهم عشوائياً</div></div>
     <div class="stepper"><button ${editable ? "" : "disabled"} data-${prefix}imps="1">+</button><b>${s.imps}</b><button ${editable ? "" : "disabled"} data-${prefix}imps="-1">−</button></div></div>
     <div class="row set-row"><div><div class="label">المحتال يشوف الفئة</div><div class="small">تلميح صغير للمحتال</div></div>
     <button class="toggle ${s.hint ? "on" : ""}" ${editable ? "" : "disabled"} data-${prefix}hint></button></div>
@@ -400,20 +437,22 @@ function renderPassSetup(){
     box.appendChild(inp);
   }
   $("pSettings").innerHTML = settingsHTML("p", pcfg, true);
+  $("pSettings").querySelectorAll("[data-ppack]").forEach(b => b.onclick = () => choosePack(b.dataset.ppack, fn => { fn(pcfg); renderPassSetup(); }));
   $("pSettings").querySelectorAll("[data-pimps]").forEach(b => b.onclick = () => { pcfg.imps = Math.min(pMaxImps(), Math.max(1, pcfg.imps + +b.dataset.pimps)); renderPassSetup(); });
   $("pSettings").querySelector("[data-phint]").onclick = () => { pcfg.hint = !pcfg.hint; renderPassSetup(); };
   $("pSettings").querySelector("[data-pdef]").onclick = () => { pcfg.showDef = pcfg.showDef === false; renderPassSetup(); };
+  fixPackCats(pcfg);
   renderCatGrid($("pCats"), pcfg.cats, id => {
     pcfg.cats = pcfg.cats.includes(id) ? pcfg.cats.filter(x => x !== id) : [...pcfg.cats, id];
     renderPassSetup();
-  });
+  }, packCats(packOf(pcfg)));
   $("pStart").disabled = !pcfg.cats.length;
   $("pStart").textContent = pcfg.cats.length ? "ابدأ اللعب ▶" : "اختار فئة وحدة على الأقل";
   store.set("passCfg", pcfg);
 }
 document.querySelectorAll("[data-pstep]").forEach(b => b.onclick = () => { pcfg.players = Math.min(20, Math.max(3, pcfg.players + +b.dataset.d)); renderPassSetup(); });
 document.querySelector('[data-allcats="pass"]').onclick = () => {
-  pcfg.cats = pcfg.cats.length === CATS.length ? [] : CATS.map(c => c.id); renderPassSetup();
+  const all = packCats(packOf(pcfg)); pcfg.cats = pcfg.cats.length === all.length ? [] : all.map(c => c.id); renderPassSetup();
 };
 
 // تاريخ المحتالين في الهاتف الواحد (يتنسى كي يتبدل عدد اللاعبين)
@@ -421,13 +460,14 @@ let passImpHist = { n: 0, h: [] };
 function passHist(players){ if(passImpHist.n !== players.length) passImpHist = { n: players.length, h: [] }; return passImpHist.h; }
 let passFirstHist = [];
 function passStart(){
-  const picked = pickWord(pcfg.cats);
+  const pack = packOf(pcfg);
+  const picked = pickWord(pcfg.cats, pack);
   if(!picked){ toast("الفئات اللي اخترتها فارغة — زيد كلمات ✏️"); return; }
   const { cat, word } = picked;
   const players = Array.from({ length: pcfg.players }, (_, i) => pcfg.names[i] || ("اللاعب " + (i + 1)));
   pgame = { cat, word, players, imps: fairPick(players.map((_, i) => i), Math.min(pcfg.imps, pMaxImps()), passHist(players)), turn: 0,
     def: pcfg.showDef === false ? "" : getDef(cat.id, word) };
-  $("passCat").textContent = catsLabel(pcfg.cats);
+  $("passCat").textContent = (pack === "orig" ? "📦 الأصلية" : "🤖 Claude") + " • " + catsLabel(pcfg.cats, pack);
   $("pFlip").innerHTML = cardHTML();
   passTurn(); show("s-pass");
 }
@@ -671,7 +711,7 @@ class HostRoom {
     if(this.settings.showDef === undefined) this.settings.showDef = true;
     this.pfps = {};   // صور البروفايل تاع اللاعبين
     if(myPfp){ this.pfps[myId] = myPfp; pfpCache[myId] = myPfp; }
-    this.settings.cats = this.settings.cats.filter(catById);
+    fixPackCats(this.settings);
     this.phase = "lobby";
     this.round = null;
     this.roomName = name;
@@ -690,7 +730,7 @@ class HostRoom {
   static fromSave(d, name){
     const h = new HostRoom(name);
     h.sid = d.sid || h.sid; h.ver = d.ver || 0;
-    h.settings = Object.assign(h.settings, d.settings || {});
+    h.settings = fixPackCats(Object.assign(h.settings, d.settings || {}));
     h.phase = d.phase || "lobby"; h.round = d.round || null;
     h.impHist = d.impHist || []; h.firstHist = d.firstHist || [];
     for(const p of d.players || []) if(!p.host && p.id !== myId) h.players.push({ ...p, stats: p.stats || cleanStats(), online: false, needWho: true });
@@ -760,7 +800,7 @@ class HostRoom {
     }
   }
   // أوامر القائد
-  setSettings(fn){ fn(this.settings); this.settings.imps = Math.min(this.settings.imps, this.maxImps()); store.set("hostSettings", this.settings); this.sync(); }
+  setSettings(fn){ fn(this.settings); fixPackCats(this.settings); this.settings.imps = Math.min(this.settings.imps, this.maxImps()); store.set("hostSettings", this.settings); this.sync(); }
   kick(id){
     const p = this.player(id); if(!p || p.host) return;
     this.players = this.players.filter(x => x.id !== id);
@@ -818,14 +858,15 @@ class HostRoom {
     if(ids.length < 3){ toast("لازم 3 لاعبين على الأقل"); return; }
     if(!this.settings.cats.length){ toast("اختار فئة وحدة على الأقل"); return; }
     const imps = Math.min(this.settings.imps, this.maxImps(ids.length));
-    const picked = pickWord(this.settings.cats);
+    const pack = packOf(this.settings);
+    const picked = pickWord(this.settings.cats, pack);
     if(!picked){ toast("الفئات اللي اخترتها فارغة — زيد كلمات ✏️"); return; }
     const { cat, word } = picked;
     const show = this.settings.showDef !== false;
     const nameOf = {}; for(const id of ids) nameOf[id] = this.player(id).name;
     this.impHist = this.impHist || [];
     this.round = { no: (this.round ? this.round.no : 0) + 1, ids, imps: fairPick(ids, imps, this.impHist), word, cat: cat.id, seen: [], first: null,
-      nameOf, def: show ? getDef(cat.id, word) : "" };
+      nameOf, pack, def: show ? getDef(cat.id, word) : "" };
     this.phase = "card";
     this.sync();
   }
@@ -859,14 +900,14 @@ class HostRoom {
       phase: this.phase, roomName: this.roomName, ips: this.ips,
       sid: this.sid, v: this.ver, mode: this.mode, code: pid === myId ? this.code : undefined,
       players: this.players.map(p => ({ id: p.id, name: p.name, online: p.online, host: !!p.host, full: p.full || "", stats: p.stats || cleanStats(), code: p.code || "" })),
-      settings: this.settings, maxImps: this.maxImps(),
+      settings: this.settings, maxImps: this.maxImps(), packInfo: packInfo(packOf(this.settings)),
       round: null
     };
     if(r && this.phase !== "lobby"){
       const cat = catById(r.cat);
       const nm = id => (this.player(id) || {}).name || (r.nameOf && r.nameOf[id]) || "؟";
       s.round = {
-        no: r.no, inRound, count: r.ids.length, seen: r.seen.filter(id => r.ids.includes(id)).length, pids: r.ids.slice(),
+        no: r.no, pack: r.pack || "claude", inRound, count: r.ids.length, seen: r.seen.filter(id => r.ids.includes(id)).length, pids: r.ids.slice(),
         names: r.ids.map(nm),
         firstIdx: r.first ? r.ids.indexOf(r.first) : -1,
         me: inRound ? (() => {
@@ -1216,13 +1257,14 @@ function renderLobby(s){
       if(p && await ask(`تخرّج ${p.name} من الغرفة؟`)) room.kick(p.id);
     });
   }
-  $("wSettings").innerHTML = settingsHTML("w", s.settings, isHost);
+  $("wSettings").innerHTML = settingsHTML("w", s.settings, isHost, s.packInfo);
   if(isHost){
+    $("wSettings").querySelectorAll("[data-wpack]").forEach(b => b.onclick = () => choosePack(b.dataset.wpack, fn => room.setSettings(fn)));
     $("wSettings").querySelectorAll("[data-wimps]").forEach(b => b.onclick = () => room.setSettings(st => st.imps = Math.min(s.maxImps, Math.max(1, st.imps + +b.dataset.wimps))));
     $("wSettings").querySelector("[data-whint]").onclick = () => room.setSettings(st => st.hint = !st.hint);
     $("wSettings").querySelector("[data-wdef]").onclick = () => room.setSettings(st => st.showDef = st.showDef === false);
   }
-  renderCatGrid($("wCats"), s.settings.cats, isHost ? id => room.setSettings(st => st.cats = st.cats.includes(id) ? st.cats.filter(x => x !== id) : [...st.cats, id]) : null);
+  renderCatGrid($("wCats"), s.settings.cats, isHost ? id => room.setSettings(st => st.cats = st.cats.includes(id) ? st.cats.filter(x => x !== id) : [...st.cats, id]) : null, s.packInfo ? s.packInfo.cats : CATS);
   $("wStart").disabled = online.length < 3 || !s.settings.cats.length;
   $("wStart").textContent = online.length < 3 ? "في انتظار اللاعبين… (3 على الأقل)" : !s.settings.cats.length ? "اختار فئة وحدة على الأقل" : `ابدأ الجولة مع ${online.length} لاعبين ▶`;
 }
@@ -1238,6 +1280,7 @@ function renderRound(s){
     if(s.phase === "card") vibe([20, 30, 20]);
   }
   fillCard($("wFlip"), { ...r.me, againText: "سيّب صبعك باش تخبّيها" });
+  document.querySelectorAll("[data-packchip]").forEach(e => e.textContent = "📚 الكلمات: " + PACKS[r.pack === "orig" ? "orig" : "claude"]);
   const look = { def: defLine(r.me) };
   // كلمتي تبقى متاحة طول الجولة (ضغط مطوّل)
   $("peekCat").textContent = "الفئة: " + (r.me.isImp && !r.me.hint ? "؟" : r.me.catName);
@@ -1389,7 +1432,7 @@ $("wInvite").onclick = sendInvite;
 $("wVoteEnd").onclick = async () => { if(room && await ask("تختم التصويت بالأصوات اللي كاينة؟")) room.finishVote(); };
 $("wAgain").onclick = () => room && room.start();
 $("wLobby").onclick = () => room && room.toLobby();
-document.querySelector('[data-allcats="wifi"]').onclick = () => room && room.setSettings(st => st.cats = st.cats.length === CATS.length ? [] : CATS.map(c => c.id));
+document.querySelector('[data-allcats="wifi"]').onclick = () => room && room.setSettings(st => { const all = packCats(packOf(st)); st.cats = st.cats.length === all.length ? [] : all.map(c => c.id); });
 
 // ============================================================
 //   تعديل الكلمات
@@ -1654,7 +1697,37 @@ $("importData").onclick = () => {
   };
   inp.click();
 };
-$("goWords").onclick = () => { renderWordCats(); show("s-words"); };
+$("goWords").onclick = () => { renderWordCats(); renderOrigPanel(); show("s-words"); };
+// ----- الكلمات الأصلية: ملف يتزاد في هذا الهاتف برك -----
+function renderOrigPanel(){
+  const n = packWords("orig");
+  $("origInfo").innerHTML = hasOrig()
+    ? `✅ كاينين في هاتفك: <b>${n.toLocaleString("en")}</b> كلمة في <b>${ORIG_CATS.length}</b> فئة<br>القائد يختارهم من الإعدادات: 📦 الكلمات الأصلية`
+    : "ما زالو ما تزادوش. زيد ملف الكلمات (.json) باش القائد يقدر يختارهم.";
+  $("origDel").classList.toggle("hidden", !hasOrig());
+  $("origCats").innerHTML = ORIG_CATS.map(c => `<span class="chip">${esc(c.icon)} ${esc(c.name)} • ${c.list.length}</span>`).join(" ");
+}
+$("origImport").onclick = () => {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = ".json,application/json,text/plain";
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0]; if(!f) return;
+    let data; try{ data = JSON.parse(await f.text()); }catch(e){ toast("الملف ماشي صحيح"); return; }
+    if(!data || data.app !== "mohtal-pack" || !Array.isArray(data.cats)){ toast("هذا ماشي ملف كلمات تاع اللعبة"); return; }
+    const cats = data.cats.filter(x => x && x.name && Array.isArray(x.words)).map(x => ({ name: x.name, icon: x.icon, words: x.words.filter(w => typeof w === "string") }));
+    if(!cats.length){ toast("الملف فارغ"); return; }
+    store.set("origPack", { name: String(data.name || "الكلمات الأصلية").slice(0, 40), cats });
+    loadOrig(); renderOrigPanel();
+    toast(`✅ تزادو ${packWords("orig").toLocaleString("en")} كلمة في ${ORIG_CATS.length} فئة`); vibe([20, 40, 20]);
+  };
+  inp.click();
+};
+$("origDel").onclick = async () => {
+  if(!await ask("تنحّي الكلمات الأصلية من هاتفك؟ اللعبة ترجع لكلمات Claude.")) return;
+  store.set("origPack", null); loadOrig(); fixPackCats(pcfg); store.set("passCfg", pcfg);
+  if(isHost && room) room.setSettings(() => {});
+  renderOrigPanel(); toast("🗑️ تنحّاو");
+};
 $("wordsBack").onclick = () => { renderWordCats(); show("s-words"); };
 $("wcAdd").onclick = addWord;
 $("wcNew").onkeydown = e => { if(e.key === "Enter") addWord(); };

@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="مين المحتال؟">
 <meta name="description" content="مين المحتال؟ لعبة جماعية بالعربية — صُنع بواسطة Chaker Red">
-<link rel="stylesheet" href="style.css?v=201">
+<link rel="stylesheet" href="style.css?v=210">
 </head>
 <body>
 <div class="app">
@@ -113,6 +113,13 @@
     <button class="btn ghost small-btn" id="importData">📂 استرجاع بياناتي</button>
   </div>
   <div class="small" style="text-align:center">التصدير يحفظ كلماتك وتعريفاتك في ملف واحد</div>
+  <div class="panel orig-panel">
+    <div class="label">📦 الكلمات الأصلية</div>
+    <div class="small" id="origInfo"></div>
+    <div id="origCats" class="orig-cats"></div>
+    <div class="share-row"><button class="btn ghost small-btn" id="origImport">📥 زيد من ملف</button><button class="btn ghost small-btn hidden" id="origDel">🗑️ نحّيها</button></div>
+  </div>
+  <div class="label" style="margin-top:4px">🤖 كلمات Claude (تتعدل)</div>
   <div class="wcats" id="wcats"></div>
 </section>
 
@@ -304,6 +311,7 @@
   <!-- البطاقة -->
   <div id="v-card" class="view">
     <div class="center">
+      <div class="pack-chip" data-packchip></div>
       <div class="small" id="wCardTop">اضغط مطوّل على البطاقة باش تشوف كلمتك — كي تسيّب تتخبّى</div>
       <div class="flip" id="wFlip"></div>
       <div class="seen" id="wSeen"></div>
@@ -318,6 +326,7 @@
   <div id="v-first" class="view">
     <div class="tie hidden" id="wTie"></div>
     <div class="center">
+      <div class="pack-chip" data-packchip></div>
       <div class="small">أول واحد يشرح كلمتو</div>
       <div class="spin" id="wSpin"></div>
       <div class="small rule hidden" id="wRule">كل واحد يقول كلمة وحدة على كلمتو بلا ما يفضحها،<br>ومن بعد تناقشو وتصوتو على المحتال.</div>
@@ -404,7 +413,7 @@
 <script src="config.js"></script>
 <script src="capacitor.js"></script>
 <script src="qrcode.js"></script>
-<script src="mqtt.min.js?v=201"></script>
+<script src="mqtt.min.js?v=210"></script>
 <script src="words.js"></script>
 <script src="words2.js"></script>
 <script src="words3.js"></script>
@@ -416,7 +425,7 @@
 <script src="defs6.js"></script>
 <script src="defs7.js"></script>
 <script src="defs8.js"></script>
-<script src="app.js?v=201"></script>
-<script src="online.js?v=201"></script>
+<script src="app.js?v=210"></script>
+<script src="online.js?v=210"></script>
 </body>
 </html>
