@@ -11,6 +11,20 @@ const store = {
 };
 function rnd(n){ const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; }
 function shuffle(arr){ const a = arr.slice(); for(let i = a.length - 1; i > 0; i--){ const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+// اختيار عادل: اللي كان محتال (ولا بدا) الجولة اللي فاتت فرصتو صغيرة بزاف باش يعاود،
+// وماشي مستحيلة — باش ما يقدر حتى واحد يحسب ويعرف شكون المحتال
+function fairPick(ids, n, hist){
+  const last = hist[hist.length - 1] || [], recent = hist.slice(-6).flat();
+  const pool = ids.slice(), out = [];
+  while(out.length < n && pool.length){
+    const w = pool.map(id => (last.includes(id) ? 0.12 : 1) / Math.pow(1 + recent.filter(x => x === id).length * 0.6, 2));
+    let x = rnd(1e9) / 1e9 * w.reduce((a, b) => a + b, 0), k = 0;
+    while(k < pool.length - 1 && (x -= w[k]) > 0) k++;
+    out.push(pool[k]); pool.splice(k, 1);
+  }
+  hist.push(out); if(hist.length > 12) hist.shift();
+  return out;
+}
 function uid(){ return Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16).padStart(2, "0")).join(""); }
 function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function vibe(p){ try{ navigator.vibrate && navigator.vibrate(p); }catch(e){} }
@@ -57,8 +71,6 @@ function setAvatarEl(el, id, name){
 }
 function refreshAvatars(){
   ["wPlayers", "wVoteList"].forEach(id => { const el = document.getElementById(id); if(el) el.dataset.key = ""; });
-  if(typeof UNO !== "undefined" && UNO.state) return UNO.render(true);
-  if(typeof SJ !== "undefined" && SJ.state) return SJ.render(true);
   if(lastState) onState(lastState);
 }
 const AV_COLORS = ["#ffcf3f","#3fe0a5","#ff8da0","#9d8bff","#6fd3ff","#ffa95c","#c6f26b","#f39cff"];
@@ -206,18 +218,28 @@ function holdToShow(el, onShow, onHide){
   // لو التطبيق راح للخلفية وهو مضغوط
   document.addEventListener("visibilitychange", () => { if(document.hidden) end(); });
 }
-// التعريف والصورة ما يبانوش أبداً للمحتال
-function fillCard(el, {isImp, word, catName, hint, againText, def, photo}){
+// التعريف والصورة ما يبانوش أبداً للمحتال، بصح البطاقة تاعو عندها نفس الشكل
+// (صورة غامضة ❓ وسطر بلاصة التعريف) باش حتى واحد ما يفرّق من بعيد
+const MYSTERY_IMG = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b2d7a"/><stop offset="1" stop-color="#16122e"/></linearGradient></defs><rect width="400" height="300" fill="url(#g)"/><circle cx="200" cy="140" r="86" fill="#ffffff10"/><text x="200" y="196" font-size="160" text-anchor="middle" fill="#ffcf3f" font-family="sans-serif" font-weight="900">?</text></svg>');
+const IMP_DEF = "🤫 ما عندكش التعريف… اسمع مليح واش يقولو";
+function cardLook({ isImp, def, photo, hasPhoto, hasDef }){
+  return {
+    photo: isImp ? (hasPhoto || photo ? MYSTERY_IMG : null) : (photo || null),
+    def: isImp ? (hasDef || def ? IMP_DEF : "") : (def || "")
+  };
+}
+function fillCard(el, {isImp, word, catName, hint, againText, def, photo, hasPhoto, hasDef}){
   if(!el.firstChild) el.innerHTML = cardHTML();
+  const look = cardLook({ isImp, def, photo, hasPhoto, hasDef });
   el.querySelector(".cat-l").textContent = "الفئة: " + (isImp && !hint ? "؟" : catName);
   el.querySelector(".word").textContent = isImp ? "أنت المحتال 🤫" : word;
   const d = el.querySelector(".def");
-  d.textContent = !isImp && def ? def : "";
-  d.classList.toggle("hidden", isImp || !def);
+  d.textContent = look.def;
+  d.classList.toggle("hidden", !look.def);
   const im = el.querySelector(".wphoto");
-  if(!isImp && photo){ if(im.src !== photo) im.src = photo; im.classList.remove("hidden"); }
+  if(look.photo){ if(im.getAttribute("src") !== look.photo) im.src = look.photo; im.classList.remove("hidden"); }
   else { im.removeAttribute("src"); im.classList.add("hidden"); }
-  el.classList.toggle("has-photo", !isImp && !!photo);
+  el.classList.toggle("has-photo", !!look.photo);
   el.querySelector(".hint").textContent = isImp ? "حاول تفهم الكلمة من كلامهم" : "ما تقولهاش للمحتال!";
   el.querySelector(".again").textContent = againText || "";
 }
@@ -314,9 +336,9 @@ $("pfSave").onclick = () => {
   myPfp = pendingPfp || null; store.set("pfp", myPfp);
   renderHomeProfile(); vibe(20);
   const next = profileAfter; profileAfter = null;
-  if(next) next(); else { toast("✅ تسجل"); show("s-games"); }
+  if(next) next(); else { toast("✅ تسجل"); show("s-home"); }
 };
-$("pfBack").onclick = () => show("s-games");
+$("pfBack").onclick = () => show("s-home");
 function renderHomeProfile(){
   if(!hasProfile()) return;
   $("homeNick").textContent = profile.nick;
@@ -327,7 +349,7 @@ async function splash(){
   show("s-splash");
   await wait(1900);
   if(!$("s-splash").classList.contains("on")) return;
-  if(pendingJoin) goPendingJoin(); else show("s-games");
+  if(pendingJoin) goPendingJoin(); else show("s-home");
 }
 // ----- روابط الدعوة -----
 function parseInvite(text){
@@ -356,20 +378,6 @@ if(APP){
   APP.getLaunchUrl().then(r => { if(r && r.url) handleInviteUrl(r.url); }).catch(() => {});
 }
 document.querySelectorAll("[data-home]").forEach(b => b.onclick = () => show("s-home"));
-// ----- اختيار اللعبة -----
-let currentGame = "mohtal";
-document.querySelectorAll("[data-games]").forEach(b => b.onclick = () => show("s-games"));
-document.querySelectorAll("[data-game]").forEach(b => b.onclick = () => {
-  vibe(12);
-  const g = b.dataset.game;
-  ensureProfile(() => {
-    currentGame = g;
-    if(g === "mohtal") show("s-home");
-    else if(g === "uno") UNO.openStart();
-    else if(g === "sj") SJ.openStart();
-  });
-});
-function gameHome(){ return currentGame === "uno" ? "s-uno-start" : currentGame === "sj" ? "s-sj-start" : "s-w-name"; }
 $("goPass").onclick = () => { renderPassSetup(); show("s-pass-setup"); };
 function openWifi(){
   if(!hasProfile()){ showProfile(true, openWifi); return; }
@@ -427,12 +435,16 @@ document.querySelector('[data-allcats="pass"]').onclick = () => {
   pcfg.cats = pcfg.cats.length === CATS.length ? [] : CATS.map(c => c.id); renderPassSetup();
 };
 
+// تاريخ المحتالين في الهاتف الواحد (يتنسى كي يتبدل عدد اللاعبين)
+let passImpHist = { n: 0, h: [] };
+function passHist(players){ if(passImpHist.n !== players.length) passImpHist = { n: players.length, h: [] }; return passImpHist.h; }
+let passFirstHist = [];
 function passStart(){
   const picked = pickWord(pcfg.cats);
   if(!picked){ toast("الفئات اللي اخترتها فارغة — زيد كلمات ✏️"); return; }
   const { cat, word } = picked;
   const players = Array.from({ length: pcfg.players }, (_, i) => pcfg.names[i] || ("اللاعب " + (i + 1)));
-  pgame = { cat, word, players, imps: shuffle(players.map((_, i) => i)).slice(0, pcfg.imps), turn: 0,
+  pgame = { cat, word, players, imps: fairPick(players.map((_, i) => i), Math.min(pcfg.imps, pMaxImps()), passHist(players)), turn: 0,
     def: pcfg.showDef === false ? "" : getDef(cat.id, word), photo: null };
   $("passCat").textContent = catsLabel(pcfg.cats);
   $("pFlip").innerHTML = cardHTML();
@@ -442,7 +454,7 @@ function passStart(){
 }
 function passTurn(onlyCard){
   const i = pgame.turn, isImp = pgame.imps.includes(i);
-  fillCard($("pFlip"), { isImp, word: pgame.word, catName: pgame.cat.name, hint: pcfg.hint, againText: "سيّب صبعك باش تخبّيها", def: pgame.def, photo: pgame.photo });
+  fillCard($("pFlip"), { isImp, word: pgame.word, catName: pgame.cat.name, hint: pcfg.hint, againText: "سيّب صبعك باش تخبّيها", def: isImp ? "" : pgame.def, photo: isImp ? null : pgame.photo, hasPhoto: !!pgame.photo, hasDef: !!pgame.def });
   if(onlyCard) return;
   $("passName").textContent = pgame.players[i];
   $("passHint").textContent = i === 0 ? "الهاتف عند" : "مرّر الهاتف إلى";
@@ -458,12 +470,13 @@ holdToShow($("pFlip"),
   () => $("pFlip").classList.add("open"),
   () => {
     $("pFlip").classList.remove("open"); $("pNext").classList.remove("hidden");
-    // زيد صورة للكلمة وسط اللعب (غير للي ماشي محتال، وغير إذا ما عندهاش صورة)
-    const canAdd = pgame && !pgame.imps.includes(pgame.turn) && !pgame.photo;
+    // زيد صورة للكلمة وسط اللعب (إذا ما عندهاش صورة). الزر يبان حتى للمحتال باش ما يتفضحش
+    const canAdd = pgame && !pgame.photo && pcfg.showDef !== false;
     $("pAddPhoto").classList.toggle("hidden", !canAdd);
   });
 $("pAddPhoto").onclick = async () => {
-  if(!pgame || pgame.photo || pgame.imps.includes(pgame.turn)) return;
+  if(!pgame || pgame.photo) return;
+  if(pgame.imps.includes(pgame.turn)){ toast("🤫 المحتال ما يقدرش يزيد صورة"); return; }
   const img = await addPhotoMidGame(pgame.cat.id, pgame.word);
   if(img){ pgame.photo = pcfg.showDef === false ? null : img; passTurn(true); $("pAddPhoto").classList.add("hidden"); }
 };
@@ -475,7 +488,9 @@ $("pNext").onclick = () => {
 function spinTo(el, names, finalIdx, done){
   const n = names.length, steps = 16 + (finalIdx % 5);
   let k = 0, delay = 50;
+  const tok = el._tok = (el._tok || 0) + 1;   // دوران جديد يحبس القديم
   (function tick(){
+    if(el._tok !== tok) return;
     el.textContent = names[((finalIdx - steps + k) % n + n * 10) % n];
     if(k < steps){ k++; delay *= 1.09; vibe(4); setTimeout(tick, delay); }
     else { el.textContent = "🎤 " + names[finalIdx]; el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop"); vibe([30, 40, 60]); done && done(); }
@@ -484,7 +499,8 @@ function spinTo(el, names, finalIdx, done){
 $("pGo").onclick = () => {
   show("s-pass-first");
   $("pReveal").classList.add("hidden"); $("pRule").classList.add("hidden");
-  spinTo($("pSpin"), pgame.players, rnd(pgame.players.length), () => {
+  if(pgame.firstIdx === undefined) pgame.firstIdx = fairPick(pgame.players.map((_, i) => i), 1, passFirstHist)[0];
+  spinTo($("pSpin"), pgame.players, pgame.firstIdx, () => {
     $("pRule").classList.remove("hidden");
     setTimeout(() => $("pReveal").classList.remove("hidden"), 400);
   });
@@ -526,7 +542,7 @@ function cleanStats(s){
 }
 function getStats(){ return cleanStats(store.get("stats", null)); }
 function sendMe(){
-  const msg = { a: "me", full: profile ? profile.name : "", stats: getStats() };
+  const msg = { a: "me", nick: profile ? profile.nick : store.get("myName", ""), full: profile ? profile.name : "", stats: getStats() };
   if(isHost && room){ const p = room.player(myId); if(p){ p.full = msg.full; p.stats = msg.stats; room.sync(); } }
   else if(net) net.send({ d: msg });
 }
@@ -564,21 +580,20 @@ function showPlayerCard(p){
 }
 function closePlayerCard(){ $("pcard").classList.add("hidden"); }
 // رابط الدعوة: يفتح التطبيق في الغرفة، ولا المتصفح
-function inviteLink(st){
-  const s = st || lastState; if(!s || !s.ips.length) return null;
+function inviteLink(){
+  const s = lastState; if(!s || !s.ips.length) return null;
   const host = s.players.find(p => p.host);
   return `${SITE}join.html?r=${encodeURIComponent(s.ips[0])}${httpPort !== HTTP_PORT ? "&h=" + httpPort : ""}&n=${encodeURIComponent(host ? host.name : "")}`;
 }
-async function copyCode(st){
-  const s = (st && st.ips) ? st : lastState; if(!s || !s.ips.length) return;
+async function copyCode(){
+  const s = lastState; if(!s || !s.ips.length) return;
   toast(await copyText(s.ips[0]) ? "📋 تنسخ الرمز: " + s.ips[0] : "ما قدرناش ننسخو");
   vibe(15);
 }
-async function sendInvite(st, gameTitle){
-  const s = (st && st.ips) ? st : lastState;
-  const link = inviteLink(s); if(!link){ toast("شعّل الواي فاي ولا نقطة الاتصال أولاً"); return; }
-  const code = s.ips[0];
-  const text = `تعال نلعبو ${gameTitle || "شكون المحتال؟ 🕵️"}\nادخل للغرفة من هنا 👇\n${link}\n\nولا اكتب رمز الغرفة: ${code}\n(لازم تكون في نفس الواي فاي)`;
+async function sendInvite(){
+  const link = inviteLink(); if(!link){ toast("شعّل الواي فاي ولا نقطة الاتصال أولاً"); return; }
+  const code = lastState.ips[0];
+  const text = `تعال نلعبو شكون المحتال؟ 🕵️\nادخل للغرفة من هنا 👇\n${link}\n\nولا اكتب رمز الغرفة: ${code}\n(لازم تكون في نفس الواي فاي)`;
   if(SHARE){
     try{ await SHARE.share({ title: "شكون المحتال؟", text, dialogTitle: "ابعث الدعوة لصحابك" }); return; }catch(e){ if(String(e && e.message).match(/cancel/i)) return; }
   } else if(navigator.share){
@@ -595,32 +610,84 @@ function needName(){
 }
 
 // ----- اتصال مع إعادة محاولة تلقائية -----
+// - نبضة كل 4 ثواني: إذا الواي فاي تبدل ولا الاتصال مات بلا ما يبان، نعاودو نتصلو بسرعة
+// - كي ترجع للتطبيق (من واتساب، الشاشة طفات…) نعاودو نتصلو فوراً
+// - رمز 4001 = نفس اللاعب دخل من اتصال آخر: هذا يحبس وما يتعاركش معاه
 class Link {
-  constructor(url, onMsg, onStatus){
+  constructor(url, onMsg, onStatus, opts = {}){
     this.url = url; this.onMsg = onMsg; this.onStatus = onStatus;
-    this.closed = false; this.tries = 0; this.queue = [];
+    this.closed = false; this.tries = 0; this.queue = []; this.everUp = false;
+    this.forever = !!opts.forever;
+    this.downSince = 0; this.lastRx = 0; this.lastBeat = Date.now();
+    this.onVis = () => { if(!document.hidden && !this.closed && !this.isOpen()){ this.tries = 0; this.open(); } };
+    document.addEventListener("visibilitychange", this.onVis);
+    this.hb = setInterval(() => this.beat(), 4000);
     this.open();
   }
+  isOpen(){ return !!(this.ws && this.ws.readyState === 1); }
   open(){
+    if(this.closed) return;
+    clearTimeout(this.rt);
+    if(this.ws && this.ws.readyState === 0) return;          // راهو يتصل دوك
     let ws;
     try{ ws = new WebSocket(this.url); }catch(e){ return this.retry(); }
     this.ws = ws;
-    ws.onopen = () => { this.tries = 0; this.onStatus("up"); this.queue.splice(0).forEach(m => ws.send(m)); };
-    ws.onmessage = e => { let m; try{ m = JSON.parse(e.data); }catch(_){ return; } this.onMsg(m); };
-    ws.onclose = () => { if(this.closed) return; this.onStatus("down", this.tries); this.retry(); };
+    ws.onopen = () => {
+      if(this.ws !== ws || this.closed) return;
+      this.tries = 0; this.everUp = true; this.downSince = 0; this.lastRx = Date.now();
+      this.onStatus("up", this);
+      this.queue.splice(0).forEach(m => ws.send(m));
+    };
+    ws.onmessage = e => {
+      if(this.ws !== ws) return;
+      this.lastRx = Date.now();
+      let m; try{ m = JSON.parse(e.data); }catch(_){ return; }
+      if(m.t !== "pong") this.onMsg(m);
+    };
+    ws.onclose = e => {
+      if(this.ws !== ws || this.closed) return;
+      if(e && e.code === 4001){ this.close(); this.onStatus("replaced", this); return; }
+      this.lost();
+    };
     ws.onerror = () => {};
+  }
+  lost(){
+    if(this.closed) return;
+    if(!this.downSince) this.downSince = Date.now();
+    this.onStatus("down", this);
+    this.retry();
   }
   retry(){
     if(this.closed) return;
     this.tries++;
-    if(this.tries > 25){ this.onStatus("dead"); return; }
-    setTimeout(() => this.open(), Math.min(400 * this.tries, 2000));
+    // أول دخول: ~20 ثانية برك. من بعد: نحاولو 3 دقايق قبل ما نستسلمو
+    if(!this.forever && ((!this.everUp && this.tries > 12) || (this.everUp && Date.now() - this.downSince > 180000))){
+      this.close(); this.onStatus("dead", this); return;
+    }
+    clearTimeout(this.rt);
+    this.rt = setTimeout(() => this.open(), Math.min(300 * this.tries, 2500));
+  }
+  beat(){
+    const now = Date.now(), paused = now - this.lastBeat > 9000; this.lastBeat = now;
+    const ws = this.ws; if(this.closed || !ws || ws.readyState !== 1) return;
+    if(paused){ this.lastRx = now; return; }                 // التطبيق كان واقف (خلفية): ما نحكموش
+    try{ ws.send('{"t":"ping"}'); }catch(e){}
+    if(now - this.lastRx > 12000){
+      // الاتصال ميت بلا ما يتسكر: نسيبوه ونعاودو
+      this.ws = null; try{ ws.close(); }catch(e){}
+      this.lost();
+    }
   }
   send(obj){
     const m = JSON.stringify(obj);
-    if(this.ws && this.ws.readyState === 1) this.ws.send(m); else this.queue.push(m);
+    if(this.isOpen()) this.ws.send(m);
+    else { this.queue.push(m); if(this.queue.length > 60) this.queue.shift(); }
   }
-  close(){ this.closed = true; try{ this.ws && this.ws.close(); }catch(e){} }
+  close(){
+    this.closed = true; clearTimeout(this.rt); clearInterval(this.hb);
+    document.removeEventListener("visibilitychange", this.onVis);
+    try{ this.ws && this.ws.close(); }catch(e){}
+  }
 }
 
 // ----- القائد: منطق الغرفة كامل هنا، والباقي يستقبلو الحالة -----
@@ -641,36 +708,60 @@ class HostRoom {
   }
   maxImps(n){ return Math.max(1, Math.floor(((n || this.players.length) - 1) / 2)); }
   player(id){ return this.players.find(p => p.id === id); }
+  // لاعب رجع ولا دخل جديد
+  arrive(id, name, quiet){
+    // نعاودو نبعثولو صورة الكلمة وصور البروفايل
+    if(this.round && this.round.photoSent) this.round.photoSent.delete(id);
+    setTimeout(() => this.sendAllPfps(id), 300);
+    const p = this.player(id);
+    if(p){ p.online = true; if(name) p.name = String(name).slice(0, 14); return p; }
+    const np = { id, name: String(name || "لاعب").slice(0, 14), online: true };
+    this.players.push(np);
+    if(!quiet){ toast("👋 " + np.name + " دخل للغرفة"); vibe(15); }
+    return np;
+  }
+  goneFromRoom(p){
+    // في اللوبي نحيه، وفي الجولة نخليه (يقدر يرجع لنفس الجولة)
+    if(this.phase === "lobby"){ this.players = this.players.filter(x => x !== p); toast("🚪 " + p.name + " خرج"); }
+    else p.online = false;
+    if(this.phase === "vote") this.checkVoteDone();
+  }
   // من السيرفر
   onServer(m){
     if(m.t === "join"){
-      // رجع ولا دخل جديد: نعاودو نبعثولو صورة الكلمة وصور البروفايل
-      if(this.round && this.round.photoSent) this.round.photoSent.delete(m.id);
-      setTimeout(() => this.sendAllPfps(m.id), 300);
-      const p = this.player(m.id);
-      if(p){ p.online = true; p.name = m.name || p.name; }
-      else { this.players.push({ id: m.id, name: (m.name || "لاعب").slice(0, 14), online: true }); toast("👋 " + (m.name || "لاعب") + " دخل للغرفة"); vibe(15); }
+      this.arrive(m.id, m.name);
+      this.sync();
+    } else if(m.t === "roster"){
+      // القائد عاود اتصل بالغرفة: القائمة الحقيقية تاع اللي متصلين دروك
+      const live = new Map((m.players || []).map(x => [x.id, x.name]));
+      for(const [id, name] of live){
+        const known = !!this.player(id);
+        this.arrive(id, known ? null : name, true);
+        // ما نعرفوهش: نطلبو منو اسمو وإحصائياتو وصورتو
+        if(!known && net) net.send({ to: id, d: { type: "who" } });
+      }
+      for(const p of this.players) if(!p.host && !live.has(p.id)) p.online = false;
+      if(this.phase === "lobby") this.players = this.players.filter(p => p.host || p.online);
+      if(this.phase === "vote") this.checkVoteDone();
       this.sync();
     } else if(m.t === "leave"){
       const p = this.player(m.id);
-      if(p){
-        // في اللوبي نحيه، وفي الجولة نخليه (يقدر يرجع)
-        if(this.phase === "lobby"){ this.players = this.players.filter(x => x.id !== m.id); toast("🚪 " + p.name + " خرج"); }
-        else p.online = false;
-        if(this.phase === "vote") this.checkVoteDone();
-        this.sync();
-      }
+      if(p){ this.goneFromRoom(p); this.sync(); }
     } else if(m.t === "msg"){
-      const d = m.d || {}, p = this.player(m.from);
-      if(!p) return;
-      if(d.a === "seen" && this.round && this.round.ids.includes(p.id) && !this.round.seen.includes(p.id)){ this.round.seen.push(p.id); this.sync(); }
-      if(d.a === "vote") this.castVote(p.id, d.target, d.no);
-      if(d.a === "me"){ p.full = String(d.full || "").slice(0, 20); p.stats = cleanStats(d.stats); this.sync(); }
+      const d = m.d || {};
+      let p = this.player(m.from);
+      // رسالة من لاعب ما وصلناش خبر دخولو (ضاع وقت ما كان القائد يعاود يتصل): ندخلوه
+      if(!p){ if(d.a !== "me" || !m.from) return; p = this.arrive(m.from, d.nick); }
+      else if(!p.online && d.a !== "bye"){ p.online = true; this.sync(); }
+      const r = this.round;
+      if(d.a === "seen" && r && (d.no === undefined || d.no === r.no) && r.ids.includes(p.id) && !r.seen.includes(p.id)){ r.seen.push(p.id); this.sync(); }
+      if(d.a === "vote") this.castVote(p.id, d.targetId !== undefined ? d.targetId : (r && r.ids[d.target]), d.no);
+      if(d.a === "me"){ p.full = String(d.full || "").slice(0, 20); p.stats = cleanStats(d.stats); if(d.nick) p.name = String(d.nick).slice(0, 14); this.sync(); }
       if(d.a === "pfp"){
         const ok = typeof d.data === "string" && d.data.startsWith("data:image/") && d.data.length < 80000;
         this.setPfp(p.id, ok ? d.data : null);
       }
-      if(d.a === "bye"){ this.players = this.players.filter(x => x.id !== p.id); if(this.round) this.round.ids = this.round.ids.filter(x => x !== p.id); this.sync(); }
+      if(d.a === "bye"){ this.goneFromRoom(p); this.sync(); }
     }
   }
   // أوامر القائد
@@ -679,8 +770,10 @@ class HostRoom {
     const p = this.player(id); if(!p || p.host) return;
     this.players = this.players.filter(x => x.id !== id);
     if(this.round){
-      this.round.ids = this.round.ids.filter(x => x !== id);
-      if(this.round.votes){ delete this.round.votes[id]; for(const v in this.round.votes) if(this.round.votes[v] === id) delete this.round.votes[v]; }
+      const r = this.round;
+      r.ids = r.ids.filter(x => x !== id);
+      r.seen = r.seen.filter(x => x !== id);
+      if(r.votes){ delete r.votes[id]; for(const v in r.votes) if(r.votes[v] === id) delete r.votes[v]; }
     }
     net.send({ t: "kick", id });
     if(this.phase === "vote") this.checkVoteDone();
@@ -693,12 +786,11 @@ class HostRoom {
     this.phase = "vote";
     this.sync();
   }
-  castVote(voter, targetIdx, voteNo){
+  castVote(voter, target, voteNo){
     const r = this.round;
     if(this.phase !== "vote" || !r || voteNo !== r.voteNo) return;
     if(!r.ids.includes(voter) || r.votes[voter]) return;            // صوت واحد برك
-    const target = r.ids[targetIdx];
-    if(!target || target === voter) return;                          // ما تصوتش على روحك
+    if(!target || !r.ids.includes(target) || target === voter) return;   // ما تصوتش على روحك
     r.votes[voter] = target;
     this.checkVoteDone();
     this.sync();
@@ -735,8 +827,10 @@ class HostRoom {
     if(!picked){ toast("الفئات اللي اخترتها فارغة — زيد كلمات ✏️"); return; }
     const { cat, word } = picked;
     const show = this.settings.showDef !== false;
-    this.round = { no: (this.round ? this.round.no : 0) + 1, ids, imps: shuffle(ids).slice(0, imps), word, cat: cat.id, seen: [], first: null,
-      def: show ? getDef(cat.id, word) : "", photo: null, photoSent: new Set() };
+    const nameOf = {}; for(const id of ids) nameOf[id] = this.player(id).name;
+    this.impHist = this.impHist || [];
+    this.round = { no: (this.round ? this.round.no : 0) + 1, ids, imps: fairPick(ids, imps, this.impHist), word, cat: cat.id, seen: [], first: null,
+      nameOf, def: show ? getDef(cat.id, word) : "", photo: null, photoSent: new Set() };
     this.phase = "card";
     this.sync();
     // صورة الكلمة من هاتف القائد
@@ -754,10 +848,17 @@ class HostRoom {
     pfpCache[id] = data || null; this.sync();
   }
   sendAllPfps(to){
+    if(!net || room !== this) return;
     for(const [id, data] of Object.entries(this.pfps)) net.send({ to, d: { type: "pfp", id, data } });
   }
-  pickFirst(){ this.round.first = this.round.ids[rnd(this.round.ids.length)]; this.round.tie = null; this.phase = "first"; this.sync(); }
-  reveal(){ this.phase = "reveal"; this.sync(); }
+  pickFirst(){
+    const r = this.round;
+    // اللي يبدأ: من اللي متصلين، وقليل باش يعاود نفس اللي بدا الجولة اللي فاتت
+    const live = r.ids.filter(id => { const p = this.player(id); return p && p.online; });
+    this.firstHist = this.firstHist || [];
+    r.first = fairPick(live.length ? live : r.ids, 1, this.firstHist)[0];
+    r.tie = null; this.phase = "first"; this.sync();
+  }
   toLobby(){
     this.phase = "lobby";
     this.players = this.players.filter(p => p.online);
@@ -775,25 +876,27 @@ class HostRoom {
     };
     if(r && this.phase !== "lobby"){
       const cat = catById(r.cat);
+      const nm = id => (this.player(id) || {}).name || (r.nameOf && r.nameOf[id]) || "؟";
       s.round = {
-        no: r.no, inRound, count: r.ids.length, seen: r.seen.length, pids: r.ids.slice(),
-        names: r.ids.map(id => (this.player(id) || {}).name || "؟"),
+        no: r.no, inRound, count: r.ids.length, seen: r.seen.filter(id => r.ids.includes(id)).length, pids: r.ids.slice(),
+        names: r.ids.map(nm),
         firstIdx: r.first ? r.ids.indexOf(r.first) : -1,
         me: inRound ? (() => {
           const imp = r.imps.includes(pid);
+          // hasPhoto/hasDef يوصلو للكل (حتى المحتال) باش الشاشات تبان كيف كيف — بلا ما نبعثو الصورة ولا التعريف للمحتال
           const me = { isImp: imp, word: imp ? null : r.word, catName: cat.name, catId: imp ? null : r.cat, hint: this.settings.hint,
-            def: imp ? "" : (r.def || ""), hasPhoto: !imp && !!r.photo };
+            def: imp ? "" : (r.def || ""), hasPhoto: !!r.photo, hasDef: !!r.def };
           // الصورة تتبعث مرة وحدة لكل لاعب (المحتال ما ياخذهاش)
           if(!imp && r.photo && !r.photoSent.has(pid)){ me.photo = r.photo; r.photoSent.add(pid); }
           return me;
         })() : null,
-        reveal: this.phase === "reveal" ? { imps: r.imps.map(id => (this.player(id) || {}).name || "؟"), word: r.word,
+        reveal: this.phase === "reveal" ? { imps: r.imps.map(nm), word: r.word,
           impIdx: r.imps.map(id => r.ids.indexOf(id)),
           result: r.result ? { winner: r.result.winner, topIdx: r.ids.indexOf(r.result.top), counts: r.result.counts,
             myVoteIdx: r.result.votes[pid] ? r.ids.indexOf(r.result.votes[pid]) : -1 } : null } : null,
         // عدد الأصوات على كل لاعب يبان للجميع وقت التصويت
         vote: this.phase === "vote" ? { no: r.voteNo, counts: r.ids.map(id => Object.values(r.votes).filter(t => t === id).length),
-          voted: Object.keys(r.votes).length, total: this.voters().length,
+          voted: r.ids.filter(id => r.votes[id]).length, total: Math.max(this.voters().length, r.ids.filter(id => r.votes[id]).length),
           myVote: r.votes[pid] ? r.ids.indexOf(r.votes[pid]) : -1, myIdx: r.ids.indexOf(pid) } : null,
         tie: this.phase === "first" && r.tie ? r.tie : null
       };
@@ -806,6 +909,7 @@ class HostRoom {
     this.pending = true;
     queueMicrotask(() => {
       this.pending = false;
+      if(room !== this || !net) return;      // الغرفة تسكرت
       for(const p of this.players) if(!p.host && p.online) net.send({ to: p.id, d: { type: "state", s: this.snapshot(p.id) } });
       onState(this.snapshot(myId));
     });
@@ -813,32 +917,16 @@ class HostRoom {
 }
 
 // ----- إنشاء غرفة -----
-// يفتح سيرفر الغرفة على هاتف القائد ويرجع الرابط والعناوين (لكل الألعاب)
-async function openRoomServer(name, label){
-  let url, ips = [];
-  if(LN){
-    const r = await LN.startServer({ port: PORT, name: (label ? label + " " : "") + name });
-    const port = r.port || PORT;
-    ips = (r.ips || []).map(ip => port === PORT ? ip : ip + ":" + port);
-    webLinks = r.httpPort > 0 ? (r.ips || []).map(ip => `http://${ip}:${r.httpPort}`) : [];
-    httpPort = r.httpPort > 0 ? r.httpPort : HTTP_PORT;
-    url = `ws://127.0.0.1:${port}/?role=host&id=${myId}&name=${encodeURIComponent(name)}`;
-  } else {
-    url = `ws://${location.hostname || "localhost"}:${TEST_PORT}/?role=host&id=${myId}&name=${encodeURIComponent(name)}`;
-    ips = [location.hostname || "localhost"];
-    webLinks = [`http://${location.host}/`];
-    httpPort = +location.port || 80;
-  }
-  if(LN && !ips.length) toast("⚠️ شعّل الواي فاي ولا نقطة الاتصال باش صحابك يدخلو");
-  return { url, ips };
-}
 $("wHost").onclick = async () => {
   const name = needName(); if(!name) return;
+  if($("wHost").disabled) return;
   $("wHost").disabled = true;
+  if(net){ const old = net; net = null; old.close(); }
+  resetRoundView();
   try{
     let url, ips = [];
     if(LN){
-      const r = await LN.startServer({ port: PORT, name: "🕵️ " + name });
+      const r = await LN.startServer({ port: PORT, name });
       const port = r.port || PORT;
       ips = (r.ips || []).map(ip => port === PORT ? ip : ip + ":" + port);
       webLinks = r.httpPort > 0 ? (r.ips || []).map(ip => `http://${ip}:${r.httpPort}`) : [];
@@ -851,8 +939,9 @@ $("wHost").onclick = async () => {
       httpPort = +location.port || 80;
     }
     if(LN && !ips.length) toast("⚠️ شعّل الواي فاي ولا نقطة الاتصال باش صحابك يدخلو");
-    isHost = true; room = new HostRoom(name); room.ips = ips;
-    net = new Link(url, m => room.onServer(m), st => connStatus(st));
+    isHost = true; const myRoom = room = new HostRoom(name); room.ips = ips;
+    // القائد يعاود يتصل بغرفتو ديما (بلا حد): كي يرجع، السيرفر يبعثلو قائمة اللي متصلين
+    net = new Link(url, m => { if(room === myRoom) myRoom.onServer(m); }, (st, l) => { if(l === net) connStatus(st); }, { forever: true });
     keepAwake(true);
     room.sync();
   }catch(e){
@@ -913,49 +1002,72 @@ $("wIpGo").onclick = () => {
 function joinRoom(ip, port){
   const name = needName(); if(!name) return;
   stopDiscovery();
-  isHost = false; room = null; lastState = null;
-  let gotState = false;
-  const url = `ws://${ip}:${port}/?role=player&id=${myId}&name=${encodeURIComponent(name)}`;
-  net = new Link(url, m => {
-    if(m.t === "msg" && m.d && m.d.type === "state"){ gotState = true; currentGame = "mohtal"; onState(m.d.s); }
-    else if(m.t === "msg" && m.d && m.d.type === "uno"){ gotState = true; currentGame = "uno"; UNO.onState(m.d.s); }
-    else if(m.t === "msg" && m.d && m.d.type === "sj"){ gotState = true; currentGame = "sj"; SJ.onState(m.d.s); }
+  const url = `ws://${ip}:${port}/?role=player&id=${encodeURIComponent(myId)}&name=${encodeURIComponent(name)}`;
+  // ضغطة مزدوجة على نفس الغرفة: ما نفتحوش اتصال ثاني (كانو يتعاركو ويبقى "إعادة الاتصال")
+  if(net && !isHost && net.url === url && !net.closed) return;
+  if(net){ const old = net; net = null; old.close(); }
+  isHost = false; room = null; lastState = null; resetRoundView();
+  let gotState = false, helloT = null, helloN = 0;
+  const link = new Link(url, m => {
+    if(net !== link) return;
+    if(m.t === "msg" && m.d && m.d.type === "state"){ gotState = true; link.stateAt = Date.now(); onState(m.d.s); }
+    else if(m.t === "msg" && m.d && m.d.type === "who"){ sendMe(); net.send({ d: { a: "pfp", data: myPfp || null } }); }
     else if(m.t === "msg" && m.d && m.d.type === "pfp"){ pfpCache[m.d.id] = m.d.data || null; if(lastState) refreshAvatars(); }
     else if(m.t === "kicked"){ leaveRoom(false); toast("القائد خرّجك من الغرفة 😅"); }
     else if(m.t === "hostgone"){ leaveRoom(false); toast("القائد سكّر الغرفة"); }
-  }, st => {
-    if(st === "dead" && !gotState){ leaveRoom(false); toast("ما قدرناش ندخلو للغرفة. تأكد أنكم في نفس الواي فاي"); show("s-w-find"); }
-    else connStatus(st);
-    // نبعثو الاسم والإحصائيات والصورة للقائد (حتى بعد إعادة الاتصال)
-    if(st === "up"){ sendMe(); if(net) net.send({ d: { a: "pfp", data: myPfp || null } }); }
+  }, (st, l) => {
+    if(l !== net) return;                       // اتصال قديم
+    if(st === "dead" && !gotState){ leaveRoom(false); toast("ما قدرناش ندخلو للغرفة. تأكد أنكم في نفس الواي فاي"); if(!HOSTED) show("s-w-find"); return; }
+    if(st === "replaced"){ leaveRoom(false); toast("دخلت لنفس الغرفة من جهة أخرى"); return; }
+    connStatus(st);
+    if(st === "up"){
+      // نعرّفو روحنا للقائد. إذا ما جاتناش الحالة في 3 ثواني نعاودو (يمكن القائد ما سمعش بينا)
+      link.upAt = Date.now(); helloN = 0;
+      const hello = () => {
+        if(net !== link || link.closed) return;
+        sendMe();
+        if(seenSent && seenSent === shownRound && lastState && lastState.round) net.send({ d: { a: "seen", no: lastState.round.no } });
+        clearTimeout(helloT);
+        helloT = setTimeout(() => { if(net === link && !(link.stateAt > link.upAt) && ++helloN < 6) hello(); }, 3000);
+      };
+      hello();
+      net.send({ d: { a: "pfp", data: myPfp || null } });
+    }
   });
+  net = link;
   keepAwake(true);
   toast("⏳ نتصلو بالغرفة…");
 }
+// شريط "إعادة الاتصال": يبان غير إذا الاتصال طاح أكثر من ثانية ونص (باش ما يبقاش يرمش)
+let connT = null;
 function connStatus(st){
-  $("wConn").classList.toggle("hidden", st === "up");
-  if(st === "dead"){ leaveRoom(false); toast("انقطع الاتصال مع الغرفة"); }
+  if(st === "up"){ clearTimeout(connT); connT = null; $("wConn").classList.add("hidden"); return; }
+  if(st === "down"){ if(!connT && $("wConn").classList.contains("hidden")) connT = setTimeout(() => { connT = null; if(net && !net.isOpen()) $("wConn").classList.remove("hidden"); }, 1500); return; }
+  if(st === "dead"){ clearTimeout(connT); connT = null; $("wConn").classList.add("hidden"); leaveRoom(false); toast("انقطع الاتصال مع الغرفة"); }
 }
 async function leaveRoom(sendBye){
+  clearTimeout(connT); connT = null; $("wConn").classList.add("hidden");
   if(net){
     if(sendBye && !isHost) net.send({ d: { a: "bye" } });
     const n = net; net = null;
-    setTimeout(() => n.close(), sendBye ? 150 : 0);
+    setTimeout(() => n.close(), sendBye ? 250 : 0);
   }
   if(isHost && LN) LN.stopServer().catch(() => {});
-  if(room && room.destroy) room.destroy();
-  isHost = false; room = null; lastState = null;
-  if(typeof UNO !== "undefined") UNO.left();
-  if(typeof SJ !== "undefined") SJ.left();
+  isHost = false; room = null; lastState = null; resetRoundView();
   keepAwake(false);
-  show(gameHome());
+  show("s-w-name");
 }
 $("wLeave").onclick = async () => {
   if(await ask(isHost ? "تسكّر الغرفة؟ كل اللاعبين يخرجو." : "تخرج من الغرفة؟")) leaveRoom(true);
 };
 
 // ----- عرض الحالة (نفس الشي عند الكل) -----
-let shownRound = 0, spunRound = 0, seenSent = 0;
+// كل شي مربوط بـ "رقم الغرفة:رقم الجولة" — غرفة جديدة تبدا من الجولة 1 وما تختلطش مع اللي قبلها
+let shownRound = "", spunRound = "", seenSent = "";
+function resetRoundView(){
+  shownRound = spunRound = seenSent = ""; voteShownNo = ""; votePick = null; voteSending = 0; roundPhoto = null; localPhoto = null;
+  ["wRevealBox", "wTie", "wVoteList"].forEach(id => { const e = $(id); if(e){ e.dataset.no = ""; e.dataset.key = ""; } });
+}
 function onState(s){
   const prev = lastState; lastState = s;
   if(!document.getElementById("s-w-room").classList.contains("on")) show("s-w-room");
@@ -1018,35 +1130,37 @@ function renderLobby(s){
   $("wStart").textContent = online.length < 3 ? "في انتظار اللاعبين… (3 على الأقل)" : !s.settings.cats.length ? "اختار فئة وحدة على الأقل" : `ابدأ الجولة مع ${online.length} لاعبين ▶`;
 }
 function renderRound(s){
-  const r = s.round;
+  const r = s.round, rk = s.sid + ":" + r.no;
   // جولة جديدة: نرجع البطاقة مقلوبة
-  if(shownRound !== r.no){
-    shownRound = r.no; seenSent = 0; roundPhoto = null; localPhoto = null;
+  if(shownRound !== rk){
+    shownRound = rk; seenSent = ""; roundPhoto = null; localPhoto = null;
+    $("wRevealBox").dataset.no = ""; $("wTie").dataset.no = "";
     $("wFlip").innerHTML = cardHTML(); $("wFlip").classList.remove("open");
     $("peekPop").classList.add("hidden");
-    $("wSpin").textContent = ""; $("wRule").classList.add("hidden");
+    $("wSpin")._tok = ($("wSpin")._tok || 0) + 1; $("wSpin").textContent = ""; $("wRule").classList.add("hidden"); $("v-first").classList.remove("spinning");
     if(s.phase === "card") vibe([20, 30, 20]);
   }
   // صورة الكلمة من القائد (تجي مرة وحدة) ولا اللي زدتها انت
   if(r.me.photo) roundPhoto = r.me.photo;
   const photo = r.me.isImp ? null : (roundPhoto || localPhoto);
   fillCard($("wFlip"), { ...r.me, photo, againText: "سيّب صبعك باش تخبّيها" });
+  const look = cardLook({ ...r.me, photo });
   // كلمتي تبقى متاحة طول الجولة (ضغط مطوّل)
   $("peekCat").textContent = "الفئة: " + (r.me.isImp && !r.me.hint ? "؟" : r.me.catName);
   $("peekWord").textContent = r.me.isImp ? "أنت المحتال 🤫" : r.me.word;
-  $("peekDef").textContent = r.me.isImp ? "" : (r.me.def || "");
-  $("peekDef").classList.toggle("hidden", r.me.isImp || !r.me.def);
-  if(photo){ $("peekImg").src = photo; $("peekImg").classList.remove("hidden"); } else $("peekImg").classList.add("hidden");
-  // زر "زيد صورة" وسط اللعب: غير للي ماشي محتال، وغير إذا الكلمة ما عندهاش صورة
-  const canAdd = !r.me.isImp && !photo && !r.me.hasPhoto && s.settings.showDef !== false && (s.phase === "card" || s.phase === "first");
+  $("peekDef").textContent = look.def;
+  $("peekDef").classList.toggle("hidden", !look.def);
+  if(look.photo){ if($("peekImg").getAttribute("src") !== look.photo) $("peekImg").src = look.photo; $("peekImg").classList.remove("hidden"); } else $("peekImg").classList.add("hidden");
+  // زر "زيد صورة" وسط اللعب: إذا الكلمة ما عندهاش صورة. يبان حتى للمحتال (نفس الشاشة للكل)
+  const canAdd = !photo && !r.me.hasPhoto && s.settings.showDef !== false && (s.phase === "card" || s.phase === "first");
   document.querySelectorAll("[data-addphoto]").forEach(b => b.classList.toggle("hidden", !canAdd));
   $("wSeen").textContent = `👀 شافو كلمتهم: ${r.seen} / ${r.count}`;
   $("wFirst").textContent = r.seen >= r.count ? "الكل شاف! شكون يبدأ؟ 🎲" : `شكون يبدأ؟ 🎲 (${r.seen}/${r.count} شافو)`;
 
   if(s.phase === "first" || s.phase === "reveal"){
-    if(spunRound !== r.no){
-      spunRound = r.no;
-      if(s.phase === "first"){
+    if(spunRound !== rk){
+      spunRound = rk;
+      if(s.phase === "first" && r.firstIdx >= 0){
         // الأزرار تبان كي يحبس الدوران
         $("v-first").classList.add("spinning");
         spinTo($("wSpin"), r.names, r.firstIdx, () => {
@@ -1055,7 +1169,7 @@ function renderRound(s){
         });
       }
     }
-    if(s.phase === "reveal" || spunRound === r.no && $("wSpin").textContent.startsWith("🎤")){
+    if(r.firstIdx >= 0 && (s.phase === "reveal" || spunRound === rk && $("wSpin").textContent.startsWith("🎤"))){
       $("wSpin").textContent = "🎤 " + r.names[r.firstIdx]; $("wRule").classList.remove("hidden");
     }
   }
@@ -1063,8 +1177,8 @@ function renderRound(s){
   const tieBox = $("wTie");
   if(s.phase === "first" && r.tie){
     tieBox.classList.remove("hidden");
-    if(tieBox.dataset.no !== String(r.tie.no)){
-      tieBox.dataset.no = r.tie.no;
+    if(tieBox.dataset.no !== rk + ":" + r.tie.no){
+      tieBox.dataset.no = rk + ":" + r.tie.no;
       const parts = r.names.map((n, i) => ({ n, c: r.tie.counts[i] })).filter(x => x.c > 0).sort((a, b) => b.c - a.c);
       tieBox.innerHTML = `⚖️ تعادل! كمّلو الأسئلة وعاودو صوّتو<div class="tl">${parts.length ? parts.map(x => esc(x.n) + ": " + x.c).join(" • ") : "حتى واحد ما صوّت"}</div>`;
       vibe([30, 50, 30]);
@@ -1076,8 +1190,8 @@ function renderRound(s){
 
   if(s.phase === "reveal" && r.reveal){
     const box = $("wRevealBox");
-    if(box.dataset.no !== String(r.no)){
-      box.dataset.no = r.no;
+    if(box.dataset.no !== rk){
+      box.dataset.no = rk;
       const res = r.reveal.result;
       let head = "";
       if(res){
@@ -1101,10 +1215,11 @@ function renderRound(s){
 // أونلاين: اضغط مطوّل على البطاقة باش تشوف كلمتك
 holdToShow($("wFlip"), () => {
   $("wFlip").classList.add("open");
-  if(seenSent !== shownRound && lastState && lastState.round){
+  if(shownRound && seenSent !== shownRound && lastState && lastState.round){
     seenSent = shownRound;
-    if(isHost) room.onServer({ t: "msg", from: myId, d: { a: "seen" } });
-    else net && net.send({ d: { a: "seen" } });
+    const d = { a: "seen", no: lastState.round.no };
+    if(isHost && room) room.onServer({ t: "msg", from: myId, d });
+    else if(net) net.send({ d });
   }
 }, () => $("wFlip").classList.remove("open"));
 // بعد البطاقة (النقاش والتصويت): زر "كلمتي" بالضغط المطوّل باش ما تنساهاش
@@ -1118,13 +1233,14 @@ $("wFirst").onclick = async () => {
   if(r.seen.length < r.ids.length && !await ask(`مازال ${r.ids.length - r.seen.length} ما شافوش كلمتهم. نكملو؟`)) return;
   room.pickFirst();
 };
-$("wReveal").onclick = async () => { if(room && await ask("متأكدين؟ رايح يبان المحتال والكلمة عند الكل.")) room.reveal(); };
 
 // زيد صورة للكلمة وسط اللعب (أونلاين)
 let roundPhoto = null, localPhoto = null;
 document.querySelectorAll("[data-addphoto]").forEach(b => b.onclick = async () => {
   const r = lastState && lastState.round;
-  if(!r || !r.me || r.me.isImp || !r.me.catId) return;
+  if(!r || !r.me) return;
+  if(r.me.isImp){ toast("🤫 أنت المحتال… ما تقدرش تزيد صورة"); return; }
+  if(!r.me.catId) return;
   const img = await addPhotoMidGame(r.me.catId, r.me.word);
   if(!img) return;
   if(isHost && room) room.setRoundPhoto(img);       // القائد: تبان عند الجميع
@@ -1132,16 +1248,20 @@ document.querySelectorAll("[data-addphoto]").forEach(b => b.onclick = async () =
 });
 
 // ----- شاشة التصويت -----
-let votePick = -1, voteShownNo = 0;
+let votePick = null, voteShownNo = "", voteSending = 0;
 function renderVote(r){
-  const v = r.vote;
-  if(voteShownNo !== v.no){ voteShownNo = v.no; votePick = -1; $("wVoteList").dataset.key = ""; vibe([20, 40, 20]); }
+  const v = r.vote, pids = r.pids || [];
+  const vk = (lastState ? lastState.sid : "") + ":" + r.no + ":" + v.no;
+  if(voteShownNo !== vk){ voteShownNo = vk; votePick = null; voteSending = 0; $("wVoteList").dataset.key = ""; vibe([20, 40, 20]); }
+  if(votePick && !pids.includes(votePick)) votePick = null;
+  const pickIdx = votePick ? pids.indexOf(votePick) : -1;
   const locked = v.myVote >= 0;
+  const sending = !locked && voteSending && Date.now() - voteSending < 4000;
   const max = Math.max(1, ...v.counts);
   const top = Math.max(...v.counts);
   const list = $("wVoteList");
   const pl = i => lastState.players.find(p => p.id === (r.pids || [])[i]);
-  const key = r.names.join("|") + "|" + (r.pids || []).map(id => JSON.stringify((lastState.players.find(p => p.id === id) || {}).stats) + (pfpCache[id] ? "i" : "")).join("|");
+  const key = r.names.join("|") + "|" + pids.join(",") + "|" + pids.map(id => JSON.stringify((lastState.players.find(p => p.id === id) || {}).stats) + (pfpCache[id] ? "i" : "")).join("|");
   if(list.dataset.key !== key){
     list.dataset.key = key;
     list.innerHTML = r.names.map((n, i) => { const p = pl(i); return `<button class="vopt ${i === v.myIdx ? "me" : ""}" data-i="${i}" style="animation-delay:${i * 0.05}s">
@@ -1150,8 +1270,9 @@ function renderVote(r){
       <span class="info" data-info="${i}" aria-label="بطاقة اللاعب">👤</span><span class="vc">0</span></button>`; }).join("");
     list.querySelectorAll(".vopt").forEach(b => b.onclick = e => {
       if(e.target.closest("[data-info]")){ e.stopPropagation(); showPlayerCard(pl(+b.dataset.i)); return; }
-      if(lastState.round.vote.myVote >= 0) return;
-      votePick = +b.dataset.i; vibe(10); renderVote(lastState.round);
+      const lr = lastState && lastState.round;
+      if(!lr || !lr.vote || lr.vote.myVote >= 0) return;
+      votePick = (lr.pids || [])[+b.dataset.i] || null; vibe(10); renderVote(lr);
     });
   }
   list.classList.toggle("locked", locked);
@@ -1159,21 +1280,27 @@ function renderVote(r){
     const i = +b.dataset.i, c = v.counts[i], vc = b.querySelector(".vc");
     if(vc.textContent !== String(c)){ vc.textContent = c; vc.classList.remove("bump"); void vc.offsetWidth; vc.classList.add("bump"); }
     b.querySelector(".bar").style.width = (c / max * 100) + "%";
-    b.classList.toggle("sel", locked ? i === v.myVote : i === votePick);
+    b.classList.toggle("sel", locked ? i === v.myVote : i === pickIdx);
     b.classList.toggle("top", c > 0 && c === top);
   });
   $("wVoted").textContent = `🗳️ صوّتو: ${v.voted} / ${v.total}`;
   $("wVoteInfo").textContent = locked ? `✔ صوّتت على ${r.names[v.myVote]} — نستناو الباقي…` : "اختار اللاعب اللي تشك فيه، ومن بعد أكّد صوتك";
-  $("wVoteOk").disabled = locked || votePick < 0;
-  $("wVoteOk").textContent = locked ? "✔ تم التصويت" : votePick >= 0 ? `تأكيد: ${r.names[votePick]} ✔` : "اختار لاعب باش تصوّت";
+  $("wVoteOk").disabled = locked || sending || pickIdx < 0;
+  $("wVoteOk").textContent = locked ? "✔ تم التصويت" : sending ? "⏳ نبعثو صوتك…" : pickIdx >= 0 ? `تأكيد: ${r.names[pickIdx]} ✔` : "اختار لاعب باش تصوّت";
+  // إذا الصوت ما وصلش (الاتصال طاح)، الزر يرجع بعد 4 ثواني
+  if(sending){ clearTimeout(renderVote.t); renderVote.t = setTimeout(() => { if(lastState && lastState.round && lastState.round.vote) renderVote(lastState.round); }, 4100); }
 }
 $("wVoteOk").onclick = async () => {
   const r = lastState && lastState.round;
-  if(!r || !r.vote || votePick < 0 || r.vote.myVote >= 0) return;
-  if(!await ask(`تأكّد صوتك على ${r.names[votePick]}؟ ما تقدرش تبدلو من بعد.`)) return;
-  const msg = { a: "vote", target: votePick, no: r.vote.no };
-  if(isHost) room.castVote(myId, msg.target, msg.no);
-  else net && net.send({ d: msg });
+  if(!r || !r.vote || !votePick || r.vote.myVote >= 0) return;
+  const target = votePick, idx = (r.pids || []).indexOf(target); if(idx < 0) return;
+  if(!await ask(`تأكّد صوتك على ${r.names[idx]}؟ ما تقدرش تبدلو من بعد.`)) return;
+  const cur = lastState && lastState.round;
+  if(!cur || !cur.vote || cur.vote.no !== r.vote.no || cur.vote.myVote >= 0) return;   // التصويت تبدل وقت التأكيد
+  const msg = { a: "vote", targetId: target, no: cur.vote.no };
+  if(isHost && room) room.castVote(myId, msg.targetId, msg.no);
+  else if(net) net.send({ d: msg });
+  voteSending = Date.now(); renderVote(cur);
   vibe(30);
 };
 $("wVote").onclick = () => room && room.startVote();
@@ -1494,16 +1621,12 @@ if(APP){
     if(!$("wordSheet").classList.contains("hidden")){ closeWordSheet(); return; }
     if(!$("pcard").classList.contains("hidden")){ closePlayerCard(); return; }
     const on = document.querySelector(".screen.on");
-    if(!on || on.id === "s-games" || (on.id === "s-profile" && !hasProfile())) APP.exitApp();
-    else if(on.id === "s-uno-lobby") $("unoLeave").click();
-    else if(on.id === "s-uno-table") $("utLeave").click();
-    else if(on.id === "s-sj-lobby" || on.id === "s-sj-game") $("sjLeave").click();
-    else if(on.id === "s-uno-start" || on.id === "s-sj-start" || on.id === "s-home") show("s-games");
+    if(!on || on.id === "s-home" || (on.id === "s-profile" && !hasProfile())) APP.exitApp();
     else if(on.id === "s-w-find") document.querySelector("[data-wback]").click();
     else if(on.id === "s-words-cat") $("wordsBack").click();
     else if(on.id === "s-w-room") $("wLeave").click();
     else if(on.id.startsWith("s-pass") && on.id !== "s-pass-setup") document.querySelector("[data-quit-pass]").click();
-    else show(on.id.startsWith("s-w-") || on.id.startsWith("s-pass") || on.id.startsWith("s-words") ? "s-home" : "s-games");
+    else show("s-home");
   });
 }
 
