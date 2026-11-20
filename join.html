@@ -4,10 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#151229">
-<title>انضمام للغرفة — شكون المحتال؟</title>
+<title>انضمام للغرفة — مين المحتال؟</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-512.png">
-<meta property="og:title" content="تعال نلعبو شكون المحتال؟ 🕵️">
+<meta property="og:image" content="icon-512.png">
+<meta property="og:title" content="تعال نلعبو مين المحتال؟ 🕵️">
 <meta property="og:description" content="اضغط باش تدخل للغرفة">
 <style>
 @font-face{font-family:"Cairo";src:url("cairo-arabic.woff2") format("woff2"),url("fonts/cairo-arabic.woff2") format("woff2");font-weight:200 1000;font-display:swap;unicode-range:U+0600-06FF,U+FB50-FDFF,U+FE70-FEFF}
@@ -27,14 +28,42 @@ a.btn.ghost{background:#2a2352;color:#f4f1ff;box-shadow:0 6px 0 #120f26}
 </head>
 <body>
 <div class="box" id="box">
-  <img src="icon.svg" alt="">
-  <h1>شكون <span>المحتال؟</span></h1>
+  <img src="icon-512.png" alt="">
+  <h1>مين <span>المحتال؟</span></h1>
   <div id="msg" class="small">⏳ نفتحو الغرفة…</div>
 </div>
 <script>
-// رابط الدعوة: join.html?r=IP[:منفذ]&h=منفذ_الصفحة&n=اسم_القائد
+// رابط الدعوة: join.html?r=IP[:منفذ]&h=منفذ_الصفحة&n=اسم_القائد  (واي فاي)
+//              join.html?o=CODE&n=اسم_القائد                        (أونلاين بالإنترنت)
+//              join.html?f=CODE                                       (زيدني صاحب)
 (function(){
   var q = new URLSearchParams(location.search);
+  var box0 = document.getElementById("box"), msg0 = document.getElementById("msg");
+  function esc0(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  var android0 = /Android/i.test(navigator.userAgent);
+  var base = location.href.replace(/join.html.*$/, "");
+  function go(param, title, note){
+    var web = base + "index.html?" + param;
+    var app = "intent://join?" + param + "#Intent;scheme=mohtal;package=com.chakerred.mohtal;S.browser_fallback_url=" + encodeURIComponent(web) + ";end";
+    msg0.innerHTML = title;
+    var html = "";
+    if(android0) html += '<a class="btn" href="' + esc0(app) + '">📱 افتح في التطبيق</a>';
+    html += '<a class="btn ' + (android0 ? "ghost" : "") + '" href="' + esc0(web) + '">🌐 العب من المتصفح</a>';
+    html += '<div class="small">' + note + '</div>';
+    box0.insertAdjacentHTML("beforeend", html);
+    setTimeout(function(){ location.href = android0 ? app : web; }, 700);
+  }
+  var o = (q.get("o") || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if(o.length === 8){
+    var hn = (q.get("n") || "").slice(0, 20);
+    go("o=" + o, (hn ? "👑 " + esc0(hn) + " يعيّطلك للغرفة<br>" : "") + 'رمز الغرفة: <span class="code">' + o.slice(0, 4) + "-" + o.slice(4) + "</span>", "🌍 تخدم من أي بلاصة بالإنترنت — ما يلزمش نفس الواي فاي");
+    return;
+  }
+  var fc = (q.get("f") || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if(fc.length === 8){
+    go("f=" + fc, '👥 زيد صاحبك في اللعبة<br>الكود: <span class="code">' + fc.slice(0, 4) + "-" + fc.slice(4) + "</span>", "كي يقبلك، تشوفو بعضاكم وتدخلو لغرف بعضاكم");
+    return;
+  }
   var r = (q.get("r") || "").replace(/[^\w.\-:]/g, "");
   var h = (q.get("h") || "47880").replace(/\D/g, "") || "47880";
   var n = (q.get("n") || "").slice(0, 14);

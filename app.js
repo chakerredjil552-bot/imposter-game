@@ -1,6 +1,6 @@
 "use strict";
 /* ============================================================
-   شكون المحتال؟ — صُنع بواسطة Chaker Red
+   مين المحتال؟ — صُنع بواسطة Chaker Red
    ============================================================ */
 
 // ---------- أدوات ----------
@@ -100,49 +100,6 @@ function getDef(catId, word){
   return (e && e.defs && e.defs[word]) || (c && c.defs[word]) || "";
 }
 
-// ----- صور الكلمات (تتسجل في الهاتف فقط) -----
-const photoDB = (() => {
-  let dbp = null;
-  const open = () => dbp || (dbp = new Promise((res, rej) => {
-    const r = indexedDB.open("mohtal", 1);
-    r.onupgradeneeded = () => r.result.createObjectStore("photos");
-    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
-  }));
-  const tx = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction("photos", mode); const q = fn(t.objectStore("photos")); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); }); };
-  return {
-    get: k => tx("readonly", s => s.get(k)).catch(() => null),
-    set: (k, v) => tx("readwrite", s => s.put(v, k)).catch(() => null),
-    del: k => tx("readwrite", s => s.delete(k)).catch(() => null),
-    keys: () => tx("readonly", s => s.getAllKeys()).catch(() => [])
-  };
-})();
-const photoKey = (catId, word) => catId + "|" + word;
-let photoIndex = new Set();   // الكلمات اللي عندها صورة (باش نبينو 📷 بلا ما نقراو الصور)
-photoDB.keys().then(ks => { photoIndex = new Set(ks || []); });
-// صور مدمجة في اللعبة للجميع (photos.js — نعمروها من بيانات المستعمل لاحقاً)
-const BUILTIN = (typeof BUILTIN_PHOTOS !== "undefined" && BUILTIN_PHOTOS) || {};
-async function getPhoto(catId, word){
-  const k = photoKey(catId, word);
-  return (photoIndex.has(k) && await photoDB.get(k)) || BUILTIN[k] || null;
-}
-const hasPhoto = (catId, word) => photoIndex.has(photoKey(catId, word)) || !!BUILTIN[photoKey(catId, word)];
-async function savePhoto(catId, word, data){
-  const k = photoKey(catId, word);
-  await photoDB.set(k, data); photoIndex.add(k);
-}
-async function deletePhoto(catId, word){
-  const k = photoKey(catId, word);
-  await photoDB.del(k); photoIndex.delete(k);
-}
-// وسط اللعب: نزيدو صورة مرة وحدة (التبديل من تعديل الكلمات برك)
-async function addPhotoMidGame(catId, word){
-  if(hasPhoto(catId, word)){ toast("الكلمة عندها صورة — بدّلها من ✏️ تعديل الكلمات"); return null; }
-  const img = await pickImage(480);
-  if(!img) return null;
-  await savePhoto(catId, word, img);
-  toast("✅ تزادت الصورة — باش تبدلها روح لتعديل الكلمات"); vibe(20);
-  return img;
-}
 // تصغير الصورة قبل ما نسجلوها
 function pickImage(maxSide, square){
   return new Promise(res => {
@@ -200,7 +157,7 @@ function renderCatGrid(el, selected, onToggle){
 }
 
 // ---------- البطاقة (نفس الشكل للجميع) ----------
-function cardHTML(){ return `<div class="in"><div class="face front"><div class="q">؟</div><div class="tap">اضغط مطوّل باش تشوف كلمتك 👆</div></div><div class="face back"><div class="cat-l"></div><img class="wphoto hidden" alt=""><div class="word"></div><div class="def hidden"></div><div class="hint"></div><div class="again">سيّب صبعك باش تخبّيها</div></div></div>`; }
+function cardHTML(){ return `<div class="in"><div class="face front"><div class="q">؟</div><div class="tap">اضغط مطوّل باش تشوف كلمتك 👆</div></div><div class="face back"><div class="cat-l"></div><div class="word"></div><div class="def hidden"></div><div class="hint"></div><div class="again">سيّب صبعك باش تخبّيها</div></div></div>`; }
 
 // الضغط المطوّل: الكلمة تبان غير وقت الضغط، وكي تسيّب صبعك تتخبّى
 function holdToShow(el, onShow, onHide){
@@ -218,28 +175,17 @@ function holdToShow(el, onShow, onHide){
   // لو التطبيق راح للخلفية وهو مضغوط
   document.addEventListener("visibilitychange", () => { if(document.hidden) end(); });
 }
-// التعريف والصورة ما يبانوش أبداً للمحتال، بصح البطاقة تاعو عندها نفس الشكل
-// (صورة غامضة ❓ وسطر بلاصة التعريف) باش حتى واحد ما يفرّق من بعيد
-const MYSTERY_IMG = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b2d7a"/><stop offset="1" stop-color="#16122e"/></linearGradient></defs><rect width="400" height="300" fill="url(#g)"/><circle cx="200" cy="140" r="86" fill="#ffffff10"/><text x="200" y="196" font-size="160" text-anchor="middle" fill="#ffcf3f" font-family="sans-serif" font-weight="900">?</text></svg>');
+// التعريف ما يبانش أبداً للمحتال، بصح البطاقة تاعو عندها نفس الشكل (سطر بلاصة التعريف)
 const IMP_DEF = "🤫 ما عندكش التعريف… اسمع مليح واش يقولو";
-function cardLook({ isImp, def, photo, hasPhoto, hasDef }){
-  return {
-    photo: isImp ? (hasPhoto || photo ? MYSTERY_IMG : null) : (photo || null),
-    def: isImp ? (hasDef || def ? IMP_DEF : "") : (def || "")
-  };
-}
-function fillCard(el, {isImp, word, catName, hint, againText, def, photo, hasPhoto, hasDef}){
+const defLine = ({ isImp, def, hasDef }) => isImp ? (hasDef || def ? IMP_DEF : "") : (def || "");
+function fillCard(el, {isImp, word, catName, hint, againText, def, hasDef}){
   if(!el.firstChild) el.innerHTML = cardHTML();
-  const look = cardLook({ isImp, def, photo, hasPhoto, hasDef });
+  const look = { def: defLine({ isImp, def, hasDef }) };
   el.querySelector(".cat-l").textContent = "الفئة: " + (isImp && !hint ? "؟" : catName);
   el.querySelector(".word").textContent = isImp ? "أنت المحتال 🤫" : word;
   const d = el.querySelector(".def");
   d.textContent = look.def;
   d.classList.toggle("hidden", !look.def);
-  const im = el.querySelector(".wphoto");
-  if(look.photo){ if(im.getAttribute("src") !== look.photo) im.src = look.photo; im.classList.remove("hidden"); }
-  else { im.removeAttribute("src"); im.classList.add("hidden"); }
-  el.classList.toggle("has-photo", !!look.photo);
   el.querySelector(".hint").textContent = isImp ? "حاول تفهم الكلمة من كلامهم" : "ما تقولهاش للمحتال!";
   el.querySelector(".again").textContent = againText || "";
 }
@@ -276,6 +222,7 @@ async function boot(){
     ensureProfile(() => { openWifi(); $("wJoin").click(); });
     return;
   }
+  if(PARAMS.get("o") || PARAMS.get("f")) handleInviteUrl(location.search);
   if(!store.get("onboarded", false)){
     show("s-perm");
     $("btnPerm").onclick = async () => {
@@ -290,11 +237,15 @@ async function boot(){
 // ----- الملف الشخصي: الاسم واللقب (مرة وحدة، ومن بعد يتبدل من القائمة) -----
 let profile = store.get("profile", null);
 const hasProfile = () => !!(profile && profile.name && profile.nick);
+// الاسم اللي يبان لصحابك: لقبك ولا اسمك (انت تختار)
+const dispName = () => profile ? ((profile.show === "name" ? profile.name : profile.nick) || profile.nick || profile.name) : store.get("myName", "");
+let pfShow = "nick";
 let profileAfter = null;
 function showProfile(first, after){
   profileAfter = after || null;
   $("pfName").value = profile ? profile.name : "";
   $("pfNick").value = profile ? profile.nick : "";
+  pfShow = profile && profile.show === "name" ? "name" : "nick";
   $("pfTitle").textContent = first ? "عرّفنا بيك 👋" : "✏️ بدّل اسمك";
   $("pfSave").textContent = first ? "يلا نبداو ✔" : "حفظ ✔";
   $("pfBack").classList.toggle("hidden", first);
@@ -317,43 +268,63 @@ $("pfPick").onclick = async () => {
 $("pfRemove").onclick = () => { pendingPfp = null; updateNickPreview(); };
 function ensureProfile(next){ if(hasProfile()) next(); else showProfile(true, next); }
 function updateNickPreview(){
-  const n = $("pfNick").value.trim();
-  $("pfPreview").textContent = (n || "لقبك") + (n ? "" : "");
+  const n = $("pfNick").value.trim(), nm = $("pfName").value.trim();
+  const shown = pfShow === "name" ? (nm || "اسمك") : (n || "لقبك");
+  $("pfPreview").textContent = shown;
+  document.querySelectorAll("#pfShow [data-show]").forEach(b => b.classList.toggle("on", b.dataset.show === pfShow));
   const av = $("pfAv");
   if(pendingPfp){ av.textContent = ""; av.style.background = ""; av.style.backgroundImage = `url('${pendingPfp}')`; av.classList.add("has-img"); }
   else { av.style.backgroundImage = ""; av.classList.remove("has-img"); av.style.background = avColor(myId); av.textContent = (n || $("pfName").value.trim() || "؟")[0]; }
   $("pfRemove").classList.toggle("hidden", !pendingPfp);
 }
 $("pfNick").oninput = updateNickPreview;
+document.querySelectorAll("#pfShow [data-show]").forEach(b => b.onclick = () => { pfShow = b.dataset.show; vibe(8); updateNickPreview(); });
 $("pfName").oninput = updateNickPreview;
 $("pfSave").onclick = () => {
   const name = $("pfName").value.trim().replace(/\s+/g, " ");
   const nick = $("pfNick").value.trim().replace(/\s+/g, " ");
   if(name.length < 2){ toast("اكتب اسمك ✍️"); $("pfName").focus(); return; }
   if(nick.length < 2){ toast("اختار لقب باش يعرفوك صحابك 😎"); $("pfNick").focus(); return; }
-  profile = { name, nick };
-  store.set("profile", profile); store.set("myName", nick);
+  profile = { name, nick, show: pfShow };
+  store.set("profile", profile); store.set("myName", dispName());
+  const pfpChanged = (pendingPfp || null) !== myPfp;
   myPfp = pendingPfp || null; store.set("pfp", myPfp);
   renderHomeProfile(); vibe(20);
+  // راك في غرفة: صحابك يشوفو الاسم الجديد مباشرة
+  if(net){ sendMe(); if(pfpChanged){ if(isHost && room) room.setPfp(myId, myPfp); else net.send({ d: { a: "pfp", data: myPfp || null } }); } }
+  if(typeof onlineProfileChanged === "function") onlineProfileChanged();
   const next = profileAfter; profileAfter = null;
   if(next) next(); else { toast("✅ تسجل"); show("s-home"); }
 };
 $("pfBack").onclick = () => show("s-home");
 function renderHomeProfile(){
   if(!hasProfile()) return;
-  $("homeNick").textContent = profile.nick;
-  setAvatarEl($("homeAv"), myId, profile.nick);
+  $("homeNick").textContent = dispName();
+  setAvatarEl($("homeAv"), myId, dispName());
 }
 $("homeProfile").onclick = () => showProfile(false);
 async function splash(){
   show("s-splash");
   await wait(1900);
   if(!$("s-splash").classList.contains("on")) return;
-  if(pendingJoin) goPendingJoin(); else show("s-home");
+  afterSplash();
+}
+function afterSplash(){
+  if(typeof onlineInit === "function" && hasProfile()) onlineInit();
+  if(pendingJoin){ goPendingJoin(); return; }
+  if(pendingFriend){ const f = pendingFriend; pendingFriend = null; show("s-home"); openFriends(f); return; }
+  show("s-home"); renderResume();
+  // التطبيق تسكّر وسط اللعب (ماشي بإرادتو): نرجعو للغرفة وحدنا
+  const r = resumeInfo();
+  if(r && Date.now() - r.d.at < 30 * 60 * 1000){ toast("🔄 نرجعو للغرفة…"); openWifi(); doResume(); }
 }
 // ----- روابط الدعوة -----
 function parseInvite(text){
   const s = String(text || "");
+  // غرفة أونلاين: ?o=CODE ولا الرمز وحدو (ABCD-EFGH)
+  const mo = /[?&#]o=([A-Za-z0-9\-]+)/.exec(s);
+  if(mo && typeof isRoomCode === "function" && isRoomCode(mo[1])) return { online: cleanCode(mo[1]) };
+  if(typeof isRoomCode === "function" && !/[.:\/]/.test(s) && isRoomCode(s)) return { online: cleanCode(s) };
   const m = /[?&]r=([^&#\s]+)/.exec(s);
   let r = m ? decodeURIComponent(m[1]) : s.trim();
   r = r.replace(/\s/g, "");
@@ -364,9 +335,14 @@ function parseInvite(text){
 function goPendingJoin(){
   if(!pendingJoin) return;
   if(net){ toast("راك في غرفة دوك — اخرج منها أولاً"); pendingJoin = null; return; }
-  ensureProfile(() => { openWifi(); $("wJoin").click(); });
+  const p = pendingJoin; pendingJoin = null;
+  ensureProfile(() => { openWifi(); if(p.online) joinOnline(p.online); else joinRoom(p.ip, p.port); });
 }
+let pendingFriend = null;
 function handleInviteUrl(url){
+  // رابط صاحب: ?f=CODE → نفتحو صحابي والكود مكتوب
+  const mf = /[?&#]f=([A-Za-z0-9\-]{8,9})/.exec(String(url || ""));
+  if(mf){ pendingFriend = mf[1]; const on = document.querySelector(".screen.on"); if(on && on.id !== "s-splash" && on.id !== "s-perm"){ const f = pendingFriend; pendingFriend = null; openFriends(f); } return; }
   const inv = parseInvite(url); if(!inv) return;
   pendingJoin = inv;
   // إذا اللعبة مفتوحة من قبل (ماشي في شاشة البداية) ندخلو مباشرة
@@ -381,12 +357,17 @@ document.querySelectorAll("[data-home]").forEach(b => b.onclick = () => show("s-
 $("goPass").onclick = () => { renderPassSetup(); show("s-pass-setup"); };
 function openWifi(){
   if(!hasProfile()){ showProfile(true, openWifi); return; }
-  $("wName").value = profile.nick;
-  $("wHello").textContent = profile.nick;
+  $("wName").value = dispName();
+  $("wHello").textContent = dispName();
+  // أونلاين: التطبيق والموقع (https). صفحة الآيفون المحلية (http) غير واي فاي
+  $("wOnlineBox").classList.toggle("hidden", !ONLINE_OK);
+  $("wLocalBox").classList.toggle("hidden", !CAN_LEAD && !HOSTED);
   $("wHost").classList.toggle("hidden", !CAN_LEAD);
-  $("wWebNote").classList.toggle("hidden", CAN_LEAD);
-  $("wJoin").className = CAN_LEAD ? "btn ghost" : "btn";
-  $("wJoin").textContent = HOSTED || pendingJoin ? "🚪 ادخل للغرفة" : "🔎 انضمام لغرفة";
+  $("wWebNote").classList.toggle("hidden", CAN_LEAD || ONLINE_OK);
+  $("wJoin").className = HOSTED ? "btn" : "btn ghost small-btn";
+  renderResume(); if(typeof renderOnlineBits === "function") renderOnlineBits();
+  if(ONLINE_OK) onlineInit();
+  $("wJoin").textContent = HOSTED ? "🚪 ادخل للغرفة" : "📶 الغرف القريبة";
   show("s-w-name");
 }
 $("goWifi").onclick = openWifi;
@@ -404,7 +385,7 @@ function settingsHTML(prefix, s, editable, maxI){
     <div class="stepper"><button ${editable ? "" : "disabled"} data-${prefix}imps="1">+</button><b>${s.imps}</b><button ${editable ? "" : "disabled"} data-${prefix}imps="-1">−</button></div></div>
     <div class="row set-row"><div><div class="label">المحتال يشوف الفئة</div><div class="small">تلميح صغير للمحتال</div></div>
     <button class="toggle ${s.hint ? "on" : ""}" ${editable ? "" : "disabled"} data-${prefix}hint></button></div>
-    <div class="row set-row"><div><div class="label">إظهار التعريف والصورة</div><div class="small">للاعبين برك — المحتال ما يشوفهمش</div></div>
+    <div class="row set-row"><div><div class="label">إظهار التعريف</div><div class="small">للاعبين برك — المحتال ما يشوفوش</div></div>
     <button class="toggle ${s.showDef !== false ? "on" : ""}" ${editable ? "" : "disabled"} data-${prefix}def></button></div>`;
 }
 function renderPassSetup(){
@@ -445,41 +426,27 @@ function passStart(){
   const { cat, word } = picked;
   const players = Array.from({ length: pcfg.players }, (_, i) => pcfg.names[i] || ("اللاعب " + (i + 1)));
   pgame = { cat, word, players, imps: fairPick(players.map((_, i) => i), Math.min(pcfg.imps, pMaxImps()), passHist(players)), turn: 0,
-    def: pcfg.showDef === false ? "" : getDef(cat.id, word), photo: null };
+    def: pcfg.showDef === false ? "" : getDef(cat.id, word) };
   $("passCat").textContent = catsLabel(pcfg.cats);
   $("pFlip").innerHTML = cardHTML();
   passTurn(); show("s-pass");
-  // الصورة من الهاتف (إذا كاينة)
-  if(pcfg.showDef !== false) getPhoto(cat.id, word).then(p => { if(pgame && pgame.word === word){ pgame.photo = p; passTurn(true); } });
 }
 function passTurn(onlyCard){
   const i = pgame.turn, isImp = pgame.imps.includes(i);
-  fillCard($("pFlip"), { isImp, word: pgame.word, catName: pgame.cat.name, hint: pcfg.hint, againText: "سيّب صبعك باش تخبّيها", def: isImp ? "" : pgame.def, photo: isImp ? null : pgame.photo, hasPhoto: !!pgame.photo, hasDef: !!pgame.def });
+  fillCard($("pFlip"), { isImp, word: pgame.word, catName: pgame.cat.name, hint: pcfg.hint, againText: "سيّب صبعك باش تخبّيها", def: isImp ? "" : pgame.def, hasDef: !!pgame.def });
   if(onlyCard) return;
   $("passName").textContent = pgame.players[i];
   $("passHint").textContent = i === 0 ? "الهاتف عند" : "مرّر الهاتف إلى";
   $("dots").innerHTML = pgame.players.map((_, k) => `<i class="${k < i ? "done" : k === i ? "now" : ""}"></i>`).join("");
   $("pFlip").classList.remove("open");
   $("pNext").classList.add("hidden");
-  $("pAddPhoto").classList.add("hidden");
   $("pNext").textContent = i === pgame.players.length - 1 ? "فهمت، خبّي ✔" : "فهمت، خبّي ومرّر ⬅";
 }
 $("pStart").onclick = passStart;
 // هاتف واحد: اضغط مطوّل باش تشوف، وكي تسيّب يبان زر "مرّر"
 holdToShow($("pFlip"),
   () => $("pFlip").classList.add("open"),
-  () => {
-    $("pFlip").classList.remove("open"); $("pNext").classList.remove("hidden");
-    // زيد صورة للكلمة وسط اللعب (إذا ما عندهاش صورة). الزر يبان حتى للمحتال باش ما يتفضحش
-    const canAdd = pgame && !pgame.photo && pcfg.showDef !== false;
-    $("pAddPhoto").classList.toggle("hidden", !canAdd);
-  });
-$("pAddPhoto").onclick = async () => {
-  if(!pgame || pgame.photo) return;
-  if(pgame.imps.includes(pgame.turn)){ toast("🤫 المحتال ما يقدرش يزيد صورة"); return; }
-  const img = await addPhotoMidGame(pgame.cat.id, pgame.word);
-  if(img){ pgame.photo = pcfg.showDef === false ? null : img; passTurn(true); $("pAddPhoto").classList.add("hidden"); }
-};
+  () => { $("pFlip").classList.remove("open"); $("pNext").classList.remove("hidden"); });
 $("pNext").onclick = () => {
   $("pFlip").classList.remove("open"); $("pNext").classList.add("hidden");
   setTimeout(() => { pgame.turn++; if(pgame.turn >= pgame.players.length) show("s-pass-ready"); else passTurn(); }, 400);
@@ -524,6 +491,8 @@ document.querySelector("[data-quit-pass]").onclick = async () => { if(await ask(
 // ============================================================
 // ?as=xxx للتجربة على الحاسوب فقط (كل نافذة كأنها هاتف مختلف)
 const TEST_AS = !NATIVE && new URLSearchParams(location.search).get("as");
+// للتجربة على الحاسوب: كل نافذة تحفظ غرفتها وحدها
+const SK = k => (TEST_AS ? "t_" + TEST_AS + "_" : "") + k;
 const myId = TEST_AS || store.get("myId", null) || (() => { const id = uid(); store.set("myId", id); return id; })();
 let net = null;        // اتصال الويب سوكت الحالي
 let room = null;       // منطق الغرفة (عند القائد فقط)
@@ -542,8 +511,8 @@ function cleanStats(s){
 }
 function getStats(){ return cleanStats(store.get("stats", null)); }
 function sendMe(){
-  const msg = { a: "me", nick: profile ? profile.nick : store.get("myName", ""), full: profile ? profile.name : "", stats: getStats() };
-  if(isHost && room){ const p = room.player(myId); if(p){ p.full = msg.full; p.stats = msg.stats; room.sync(); } }
+  const msg = { a: "me", nick: dispName(), full: profile ? profile.name : "", stats: getStats(), code: typeof myFriendCode === "function" ? myFriendCode() : "" };
+  if(isHost && room){ const p = room.player(myId); if(p){ p.full = msg.full; p.stats = msg.stats; p.name = msg.nick.slice(0, 20); p.code = msg.code; room.sync(); } }
   else if(net) net.send({ d: msg });
 }
 // نحسبو نتيجة الجولة مرة وحدة برك
@@ -581,30 +550,33 @@ function showPlayerCard(p){
 function closePlayerCard(){ $("pcard").classList.add("hidden"); }
 // رابط الدعوة: يفتح التطبيق في الغرفة، ولا المتصفح
 function inviteLink(){
-  const s = lastState; if(!s || !s.ips.length) return null;
+  const s = lastState; if(!s) return null;
   const host = s.players.find(p => p.host);
+  if(s.code) return `${SITE}join.html?o=${s.code}&n=${encodeURIComponent(host ? host.name : "")}`;
+  if(!s.ips.length) return null;
   return `${SITE}join.html?r=${encodeURIComponent(s.ips[0])}${httpPort !== HTTP_PORT ? "&h=" + httpPort : ""}&n=${encodeURIComponent(host ? host.name : "")}`;
 }
 async function copyCode(){
-  const s = lastState; if(!s || !s.ips.length) return;
-  toast(await copyText(s.ips[0]) ? "📋 تنسخ الرمز: " + s.ips[0] : "ما قدرناش ننسخو");
+  const s = lastState; if(!s) return;
+  const c = s.code ? fmtCode(s.code) : s.ips[0]; if(!c) return;
+  toast(await copyText(c) ? "📋 تنسخ الرمز: " + c : "ما قدرناش ننسخو");
   vibe(15);
 }
 async function sendInvite(){
   const link = inviteLink(); if(!link){ toast("شعّل الواي فاي ولا نقطة الاتصال أولاً"); return; }
-  const code = lastState.ips[0];
-  const text = `تعال نلعبو شكون المحتال؟ 🕵️\nادخل للغرفة من هنا 👇\n${link}\n\nولا اكتب رمز الغرفة: ${code}\n(لازم تكون في نفس الواي فاي)`;
+  const online = !!lastState.code, code = online ? fmtCode(lastState.code) : lastState.ips[0];
+  const text = `تعال نلعبو مين المحتال؟ 🕵️\nادخل للغرفة من هنا 👇\n${link}\n\nولا اكتب رمز الغرفة: ${code}\n${online ? "(تخدم من أي بلاصة بالإنترنت 🌍)" : "(لازم تكون في نفس الواي فاي)"}`;
   if(SHARE){
-    try{ await SHARE.share({ title: "شكون المحتال؟", text, dialogTitle: "ابعث الدعوة لصحابك" }); return; }catch(e){ if(String(e && e.message).match(/cancel/i)) return; }
+    try{ await SHARE.share({ title: "مين المحتال؟", text, dialogTitle: "ابعث الدعوة لصحابك" }); return; }catch(e){ if(String(e && e.message).match(/cancel/i)) return; }
   } else if(navigator.share){
-    try{ await navigator.share({ title: "شكون المحتال؟", text }); return; }catch(e){ if(e && e.name === "AbortError") return; }
+    try{ await navigator.share({ title: "مين المحتال؟", text }); return; }catch(e){ if(e && e.name === "AbortError") return; }
   }
   toast(await copyText(text) ? "📋 تنسخت الدعوة — الصقها في أي محادثة" : "ما قدرناش ننسخو");
 }
 
 function myName(){ return ($("wName").value || "").trim(); }
 function needName(){
-  const n = hasProfile() ? profile.nick : myName();
+  const n = hasProfile() ? dispName() : myName();
   if(!n){ showProfile(true, openWifi); return null; }
   store.set("myName", n); return n;
 }
@@ -693,7 +665,7 @@ class Link {
 // ----- القائد: منطق الغرفة كامل هنا، والباقي يستقبلو الحالة -----
 class HostRoom {
   constructor(name){
-    this.players = [{ id: myId, name, online: true, host: true, full: profile ? profile.name : "", stats: getStats() }];
+    this.players = [{ id: myId, name, online: true, host: true, full: profile ? profile.name : "", stats: getStats(), code: typeof myFriendCode === "function" ? myFriendCode() : "" }];
     this.sid = uid();   // رقم الغرفة باش الجولات ما يتحسبوش مرتين
     this.settings = store.get("hostSettings", { imps: 1, hint: true, showDef: true, cats: CATS.map(c => c.id) });
     if(this.settings.showDef === undefined) this.settings.showDef = true;
@@ -705,17 +677,40 @@ class HostRoom {
     this.roomName = name;
     this.ips = [];
     this.pending = false;
+    this.mode = "wifi"; this.code = null; this.rcId = null; this.ver = 0;
+  }
+  // حفظ الغرفة في الهاتف (باش ترجع إذا التطبيق تسكّر)
+  toSave(){
+    const r = this.round;
+    return { at: Date.now(), mode: this.mode, code: this.code, name: this.roomName, sid: this.sid, ver: this.ver + 100,
+      settings: this.settings, phase: this.phase,
+      players: this.players.map(p => ({ id: p.id, name: p.name, host: !!p.host, full: p.full || "", stats: p.stats || null, code: p.code || "" })),
+      round: r ? JSON.parse(JSON.stringify(r)) : null, impHist: this.impHist || [], firstHist: this.firstHist || [] };
+  }
+  static fromSave(d, name){
+    const h = new HostRoom(name);
+    h.sid = d.sid || h.sid; h.ver = d.ver || 0;
+    h.settings = Object.assign(h.settings, d.settings || {});
+    h.phase = d.phase || "lobby"; h.round = d.round || null;
+    h.impHist = d.impHist || []; h.firstHist = d.firstHist || [];
+    for(const p of d.players || []) if(!p.host && p.id !== myId) h.players.push({ ...p, stats: p.stats || cleanStats(), online: false, needWho: true });
+    if(h.phase === "lobby") h.players = h.players.filter(p => p.host);
+    return h;
   }
   maxImps(n){ return Math.max(1, Math.floor(((n || this.players.length) - 1) / 2)); }
   player(id){ return this.players.find(p => p.id === id); }
   // لاعب رجع ولا دخل جديد
   arrive(id, name, quiet){
-    // نعاودو نبعثولو صورة الكلمة وصور البروفايل
-    if(this.round && this.round.photoSent) this.round.photoSent.delete(id);
+    // نعاودو نبعثولو صور البروفايل
     setTimeout(() => this.sendAllPfps(id), 300);
     const p = this.player(id);
-    if(p){ p.online = true; if(name) p.name = String(name).slice(0, 14); return p; }
-    const np = { id, name: String(name || "لاعب").slice(0, 14), online: true };
+    if(p){
+      p.online = true; if(name) p.name = String(name).slice(0, 20);
+      // غرفة رجعناها من الحفظ: نطلبو منو صورتو وإحصائياتو
+      if(p.needWho && net){ p.needWho = false; net.send({ to: id, d: { type: "who" } }); }
+      return p;
+    }
+    const np = { id, name: String(name || "لاعب").slice(0, 20), online: true };
     this.players.push(np);
     if(!quiet){ toast("👋 " + np.name + " دخل للغرفة"); vibe(15); }
     return np;
@@ -756,7 +751,7 @@ class HostRoom {
       const r = this.round;
       if(d.a === "seen" && r && (d.no === undefined || d.no === r.no) && r.ids.includes(p.id) && !r.seen.includes(p.id)){ r.seen.push(p.id); this.sync(); }
       if(d.a === "vote") this.castVote(p.id, d.targetId !== undefined ? d.targetId : (r && r.ids[d.target]), d.no);
-      if(d.a === "me"){ p.full = String(d.full || "").slice(0, 20); p.stats = cleanStats(d.stats); if(d.nick) p.name = String(d.nick).slice(0, 14); this.sync(); }
+      if(d.a === "me"){ p.full = String(d.full || "").slice(0, 20); p.stats = cleanStats(d.stats); if(d.nick) p.name = String(d.nick).slice(0, 20); if(typeof d.code === "string") p.code = d.code.slice(0, 12); this.sync(); }
       if(d.a === "pfp"){
         const ok = typeof d.data === "string" && d.data.startsWith("data:image/") && d.data.length < 80000;
         this.setPfp(p.id, ok ? d.data : null);
@@ -830,16 +825,9 @@ class HostRoom {
     const nameOf = {}; for(const id of ids) nameOf[id] = this.player(id).name;
     this.impHist = this.impHist || [];
     this.round = { no: (this.round ? this.round.no : 0) + 1, ids, imps: fairPick(ids, imps, this.impHist), word, cat: cat.id, seen: [], first: null,
-      nameOf, def: show ? getDef(cat.id, word) : "", photo: null, photoSent: new Set() };
+      nameOf, def: show ? getDef(cat.id, word) : "" };
     this.phase = "card";
     this.sync();
-    // صورة الكلمة من هاتف القائد
-    if(show){ const r = this.round; getPhoto(cat.id, word).then(p => { if(p && this.round === r){ r.photo = p; r.photoSent.clear(); this.sync(); } }); }
-  }
-  // القائد زاد صورة وسط اللعب: تبان عند الجميع
-  setRoundPhoto(img){
-    const r = this.round; if(!r || this.settings.showDef === false) return;
-    r.photo = img; r.photoSent.clear(); this.sync();
   }
   // صور البروفايل: نبعثوهم مرة وحدة برك (ماشي مع كل تحديث)
   setPfp(id, data){
@@ -869,8 +857,8 @@ class HostRoom {
     const r = this.round, inRound = !!(r && r.ids.includes(pid));
     const s = {
       phase: this.phase, roomName: this.roomName, ips: this.ips,
-      sid: this.sid,
-      players: this.players.map(p => ({ id: p.id, name: p.name, online: p.online, host: !!p.host, full: p.full || "", stats: p.stats || cleanStats() })),
+      sid: this.sid, v: this.ver, mode: this.mode, code: pid === myId ? this.code : undefined,
+      players: this.players.map(p => ({ id: p.id, name: p.name, online: p.online, host: !!p.host, full: p.full || "", stats: p.stats || cleanStats(), code: p.code || "" })),
       settings: this.settings, maxImps: this.maxImps(),
       round: null
     };
@@ -883,12 +871,9 @@ class HostRoom {
         firstIdx: r.first ? r.ids.indexOf(r.first) : -1,
         me: inRound ? (() => {
           const imp = r.imps.includes(pid);
-          // hasPhoto/hasDef يوصلو للكل (حتى المحتال) باش الشاشات تبان كيف كيف — بلا ما نبعثو الصورة ولا التعريف للمحتال
-          const me = { isImp: imp, word: imp ? null : r.word, catName: cat.name, catId: imp ? null : r.cat, hint: this.settings.hint,
-            def: imp ? "" : (r.def || ""), hasPhoto: !!r.photo, hasDef: !!r.def };
-          // الصورة تتبعث مرة وحدة لكل لاعب (المحتال ما ياخذهاش)
-          if(!imp && r.photo && !r.photoSent.has(pid)){ me.photo = r.photo; r.photoSent.add(pid); }
-          return me;
+          // hasDef يوصل للكل (حتى المحتال) باش الشاشات تبان كيف كيف — بلا ما نبعثو التعريف للمحتال
+          return { isImp: imp, word: imp ? null : r.word, catName: cat.name, catId: imp ? null : r.cat, hint: this.settings.hint,
+            def: imp ? "" : (r.def || ""), hasDef: !!r.def };
         })() : null,
         reveal: this.phase === "reveal" ? { imps: r.imps.map(nm), word: r.word,
           impIdx: r.imps.map(id => r.ids.indexOf(id)),
@@ -910,6 +895,10 @@ class HostRoom {
     queueMicrotask(() => {
       this.pending = false;
       if(room !== this || !net) return;      // الغرفة تسكرت
+      this.ver++;
+      clearTimeout(this.saveT); this.saveT = setTimeout(saveHostRoom, 800);
+      if(this.mode === "online" && typeof setHosting === "function")
+        setHosting({ id: this.rcId, nm: this.roomName, n: this.players.filter(p => p.online).length, ph: this.phase });
       for(const p of this.players) if(!p.host && p.online) net.send({ to: p.id, d: { type: "state", s: this.snapshot(p.id) } });
       onState(this.snapshot(myId));
     });
@@ -917,12 +906,42 @@ class HostRoom {
 }
 
 // ----- إنشاء غرفة -----
-$("wHost").onclick = async () => {
+// الغرفة تتسجل في الهاتف: إذا التطبيق تسكّر ولا الهاتف طفا، القائد يرجّعها كيما كانت
+function saveHostRoom(){ if(isHost && room && room.toSave) store.set(SK("hostSave"), room.toSave()); }
+function clearSaves(){ store.set(SK("hostSave"), null); store.set(SK("activeRoom"), null); }
+function afterHostStart(myRoom){
+  isHost = true; room = myRoom;
+  keepAwake(true);
+  room.sync();
+  renderResume();
+}
+// غرفة أونلاين (بالإنترنت): تخدم في التطبيق وفي الموقع
+async function hostOnline(restore){
   const name = needName(); if(!name) return;
-  if($("wHost").disabled) return;
-  $("wHost").disabled = true;
+  if(!ONLINE_OK){ toast("الأونلاين يخدم في التطبيق ولا في الموقع"); return; }
+  if(hostBusy) return; hostBusy = true;
+  try{
+    if(net){ const old = net; net = null; old.close(); }
+    resetRoundView(); isHost = false; room = null; lastState = null;
+    toast("⏳ نفتحو الغرفة…");
+    await onlineInit();
+    const rc = await roomCrypto(restore && restore.code ? restore.code : randCode(8));
+    const myRoom = restore ? HostRoom.fromSave(restore, name) : new HostRoom(name);
+    myRoom.mode = "online"; myRoom.code = rc.code; myRoom.rcId = rc.id; myRoom.ips = []; webLinks = [];
+    room = myRoom; isHost = true;
+    net = new OnlineHostLink(rc, m => { if(room === myRoom) myRoom.onServer(m); }, (st, l) => { if(l === net) connStatus(st); });
+    afterHostStart(myRoom);
+    if(restore) toast("🔄 رجعت غرفتك — صحابك يرجعو وحدهم");
+  }catch(e){ toast("ما قدرناش نفتحو الغرفة. تأكد من الإنترنت"); }
+  hostBusy = false;
+}
+let hostBusy = false;
+// غرفة في نفس الواي فاي (بلا إنترنت) — من التطبيق برك
+async function hostWifi(restore){
+  const name = needName(); if(!name) return;
+  if(hostBusy) return; hostBusy = true;
   if(net){ const old = net; net = null; old.close(); }
-  resetRoundView();
+  resetRoundView(); isHost = false; room = null; lastState = null;
   try{
     let url, ips = [];
     if(LN){
@@ -939,16 +958,20 @@ $("wHost").onclick = async () => {
       httpPort = +location.port || 80;
     }
     if(LN && !ips.length) toast("⚠️ شعّل الواي فاي ولا نقطة الاتصال باش صحابك يدخلو");
-    isHost = true; const myRoom = room = new HostRoom(name); room.ips = ips;
+    const myRoom = restore ? HostRoom.fromSave(restore, name) : new HostRoom(name);
+    myRoom.mode = "wifi"; myRoom.ips = ips;
+    room = myRoom; isHost = true;
     // القائد يعاود يتصل بغرفتو ديما (بلا حد): كي يرجع، السيرفر يبعثلو قائمة اللي متصلين
     net = new Link(url, m => { if(room === myRoom) myRoom.onServer(m); }, (st, l) => { if(l === net) connStatus(st); }, { forever: true });
-    keepAwake(true);
-    room.sync();
+    net.key = "host:" + url;
+    afterHostStart(myRoom);
   }catch(e){
     toast("ما قدرناش نفتحو الغرفة. تأكد من الواي فاي");
   }
-  $("wHost").disabled = false;
-};
+  hostBusy = false;
+}
+$("wHost").onclick = () => hostWifi();
+$("wHostOnline").onclick = () => hostOnline();
 
 // ----- البحث والانضمام -----
 const foundRooms = new Map();
@@ -958,23 +981,30 @@ function renderRooms(){
   box.innerHTML = [...foundRooms.values()].map(r => `<button class="room" data-ip="${esc(r.host)}" data-port="${r.port}"><span class="ri">👑</span><span><b>غرفة ${esc(r.name)}</b><small>اضغط باش تدخل</small></span></button>`).join("");
   box.querySelectorAll(".room").forEach(b => b.onclick = () => joinRoom(b.dataset.ip, +b.dataset.port));
 }
-$("wJoin").onclick = async () => {
+// شاشة الدخول: wifi = نقلبو على الغرف القريبة، وإلا غير بالرمز
+async function openFind(wifi){
+  if(!needName()) return;
+  foundRooms.clear();
+  const scan = !!(wifi && LN);
+  $("wSearching").classList.toggle("hidden", !scan);
+  $("rooms").classList.toggle("hidden", !scan);
+  $("wFindChip").textContent = scan ? "📶 الغرف القريبة" : "🔗 ادخل لغرفة";
+  renderRooms(); show("s-w-find");
+  $("wIp").value = "";
+  if(scan && !discovering){
+    discovering = true;
+    try{ await LN.startDiscovery(); }catch(e){ toast("البحث التلقائي ما خدمش، استعمل الرمز"); }
+  }
+}
+$("wJoin").onclick = () => {
   if(!needName()) return;
   // الصفحة جات من هاتف القائد: ندخلو مباشرة
   if(HOSTED){ joinRoom(location.hostname, window.ROOM_WS_PORT); return; }
   // جاي من رابط دعوة: الرمز واجد
-  if(pendingJoin){ const p = pendingJoin; pendingJoin = null; joinRoom(p.ip, p.port); return; }
-  foundRooms.clear();
-  // في الموقع (GitHub) ما نقدروش نقلبو على الغرف، غير بالرمز
-  $("wSearching").classList.toggle("hidden", !NATIVE);
-  $("rooms").classList.toggle("hidden", !NATIVE);
-  renderRooms(); show("s-w-find");
-  $("wIp").value = store.get("lastIp", "");
-  if(LN && !discovering){
-    discovering = true;
-    try{ await LN.startDiscovery(); }catch(e){ toast("البحث التلقائي ما خدمش، استعمل الرمز"); }
-  }
+  if(pendingJoin){ goPendingJoin(); return; }
+  openFind(true);
 };
+$("wJoinCode").onclick = () => { if(pendingJoin){ goPendingJoin(); return; } openFind(false); };
 if(LN){
   LN.addListener("room", r => {
     const key = r.host + ":" + r.port;
@@ -984,41 +1014,51 @@ if(LN){
   });
 }
 function stopDiscovery(){ if(LN && discovering){ discovering = false; LN.stopDiscovery().catch(() => {}); } }
-document.querySelector("[data-wback]").onclick = () => { stopDiscovery(); show("s-w-name"); };
+document.querySelector("[data-wback]").onclick = () => { stopDiscovery(); openWifi(); };
 $("wIpGo").onclick = () => {
-  // يقبل الرمز ولا رابط الدعوة كامل
+  // يقبل رمز الغرفة الأونلاين، ولا رمز الواي فاي، ولا رابط الدعوة كامل
   const inv = parseInvite($("wIp").value.trim());
   if(!inv){ toast("الرمز ماشي صحيح"); return; }
+  if(inv.online){ joinOnline(inv.online); return; }
   const v = inv.ip + (inv.port !== PORT ? ":" + inv.port : "");
   const ip = inv.ip, port = inv.port !== PORT ? inv.port : 0;
   store.set("lastIp", v);
-  if(!NATIVE){
+  if(!NATIVE && !HOSTED && !PARAMS.has("leader")){
     // من المتصفح: نروحو لصفحة اللعبة اللي على هاتف القائد
     location.href = `http://${ip}:${HTTP_PORT}/?name=${encodeURIComponent(store.get("myName", ""))}`;
     return;
   }
   joinRoom(ip, +port || PORT);
 };
-function joinRoom(ip, port){
+$("wIp").onkeydown = e => { if(e.key === "Enter") $("wIpGo").click(); };
+
+// لاعب يدخل لغرفة (واي فاي ولا أونلاين): نفس المنطق، غير الطريق يتبدل
+function startGuest(key, makeLink, saveAs){
   const name = needName(); if(!name) return;
   stopDiscovery();
-  const url = `ws://${ip}:${port}/?role=player&id=${encodeURIComponent(myId)}&name=${encodeURIComponent(name)}`;
   // ضغطة مزدوجة على نفس الغرفة: ما نفتحوش اتصال ثاني (كانو يتعاركو ويبقى "إعادة الاتصال")
-  if(net && !isHost && net.url === url && !net.closed) return;
+  if(net && !isHost && net.key === key && !net.closed) return;
   if(net){ const old = net; net = null; old.close(); }
-  isHost = false; room = null; lastState = null; resetRoundView();
+  if(isHost){ isHost = false; store.set(SK("hostSave"), null); }
+  room = null; lastState = null; resetRoundView();
+  store.set(SK("activeRoom"), { ...saveAs, at: Date.now() });
   let gotState = false, helloT = null, helloN = 0;
-  const link = new Link(url, m => {
+  const link = makeLink(m => {
     if(net !== link) return;
     if(m.t === "msg" && m.d && m.d.type === "state"){ gotState = true; link.stateAt = Date.now(); onState(m.d.s); }
     else if(m.t === "msg" && m.d && m.d.type === "who"){ sendMe(); net.send({ d: { a: "pfp", data: myPfp || null } }); }
     else if(m.t === "msg" && m.d && m.d.type === "pfp"){ pfpCache[m.d.id] = m.d.data || null; if(lastState) refreshAvatars(); }
-    else if(m.t === "kicked"){ leaveRoom(false); toast("القائد خرّجك من الغرفة 😅"); }
-    else if(m.t === "hostgone"){ leaveRoom(false); toast("القائد سكّر الغرفة"); }
+    else if(m.t === "kicked"){ clearSaves(); leaveRoom(false); toast("القائد خرّجك من الغرفة 😅"); }
+    else if(m.t === "hostgone"){ clearSaves(); leaveRoom(false); toast("القائد سكّر الغرفة"); }
   }, (st, l) => {
     if(l !== net) return;                       // اتصال قديم
-    if(st === "dead" && !gotState){ leaveRoom(false); toast("ما قدرناش ندخلو للغرفة. تأكد أنكم في نفس الواي فاي"); if(!HOSTED) show("s-w-find"); return; }
-    if(st === "replaced"){ leaveRoom(false); toast("دخلت لنفس الغرفة من جهة أخرى"); return; }
+    if(st === "dead" && !gotState){
+      store.set(SK("activeRoom"), null); leaveRoom(false);
+      toast(saveAs.mode === "online" ? "ما لقيناش الغرفة 🤔 تأكد من الرمز، ولا القائد مازال ما فتحهاش" : "ما قدرناش ندخلو للغرفة. تأكد أنكم في نفس الواي فاي");
+      if(!HOSTED) openFind(saveAs.mode !== "online");
+      return;
+    }
+    if(st === "replaced"){ store.set(SK("activeRoom"), null); leaveRoom(false); toast("دخلت لنفس الغرفة من جهة أخرى"); return; }
     connStatus(st);
     if(st === "up"){
       // نعرّفو روحنا للقائد. إذا ما جاتناش الحالة في 3 ثواني نعاودو (يمكن القائد ما سمعش بينا)
@@ -1028,54 +1068,104 @@ function joinRoom(ip, port){
         sendMe();
         if(seenSent && seenSent === shownRound && lastState && lastState.round) net.send({ d: { a: "seen", no: lastState.round.no } });
         clearTimeout(helloT);
-        helloT = setTimeout(() => { if(net === link && !(link.stateAt > link.upAt) && ++helloN < 6) hello(); }, 3000);
+        helloT = setTimeout(() => { if(net === link && !(link.stateAt > link.upAt) && ++helloN < 8) hello(); }, 3000);
       };
       hello();
       net.send({ d: { a: "pfp", data: myPfp || null } });
     }
   });
+  link.key = key;
   net = link;
   keepAwake(true);
+  renderResume();
   toast("⏳ نتصلو بالغرفة…");
+}
+function joinRoom(ip, port){
+  const name = needName(); if(!name) return;
+  const url = `ws://${ip}:${port}/?role=player&id=${encodeURIComponent(myId)}&name=${encodeURIComponent(name)}`;
+  startGuest("wifi:" + ip + ":" + port, (onMsg, onSt) => new Link(url, onMsg, onSt), { mode: "wifi", ip, port });
+}
+async function joinOnline(code){
+  if(!needName()) return;
+  code = cleanCode(code);
+  if(!ONLINE_OK){ toast("الأونلاين يخدم في التطبيق ولا في الموقع"); return; }
+  if(!isRoomCode(code)){ toast("رمز الغرفة فيه 8 حروف ✍️"); return; }
+  await onlineInit();
+  const rc = await roomCrypto(code);
+  startGuest("on:" + rc.id, (onMsg, onSt) => new OnlinePlayerLink(rc, onMsg, onSt), { mode: "online", code });
 }
 // شريط "إعادة الاتصال": يبان غير إذا الاتصال طاح أكثر من ثانية ونص (باش ما يبقاش يرمش)
 let connT = null;
 function connStatus(st){
   if(st === "up"){ clearTimeout(connT); connT = null; $("wConn").classList.add("hidden"); return; }
   if(st === "down"){ if(!connT && $("wConn").classList.contains("hidden")) connT = setTimeout(() => { connT = null; if(net && !net.isOpen()) $("wConn").classList.remove("hidden"); }, 1500); return; }
-  if(st === "dead"){ clearTimeout(connT); connT = null; $("wConn").classList.add("hidden"); leaveRoom(false); toast("انقطع الاتصال مع الغرفة"); }
+  if(st === "dead"){ clearTimeout(connT); connT = null; $("wConn").classList.add("hidden"); leaveRoom(false); toast("انقطع الاتصال مع الغرفة — تقدر ترجع من زر 🔄"); }
 }
+// sendBye = خرج بإرادتو (✕): ننساو الغرفة. غير هكذا نخليوها باش يقدر يرجع
 async function leaveRoom(sendBye){
   clearTimeout(connT); connT = null; $("wConn").classList.add("hidden");
+  const wasHost = isHost, mode = room && room.mode;
   if(net){
     if(sendBye && !isHost) net.send({ d: { a: "bye" } });
     const n = net; net = null;
-    setTimeout(() => n.close(), sendBye ? 250 : 0);
+    setTimeout(() => n.close(), sendBye ? 300 : 0);
   }
-  if(isHost && LN) LN.stopServer().catch(() => {});
+  if(wasHost && mode === "online"){ dropJoinRequests(); setHosting(null); }
+  if(wasHost && LN && mode !== "online") LN.stopServer().catch(() => {});
+  if(sendBye) clearSaves();
   isHost = false; room = null; lastState = null; resetRoundView();
   keepAwake(false);
-  show("s-w-name");
+  openWifi();
 }
 $("wLeave").onclick = async () => {
   if(await ask(isHost ? "تسكّر الغرفة؟ كل اللاعبين يخرجو." : "تخرج من الغرفة؟")) leaveRoom(true);
 };
 
+// ----- الرجوع للغرفة (بعد ما التطبيق تسكّر ولا الاتصال طاح بزاف) -----
+const RESUME_MAX = 6 * 3600 * 1000;
+function resumeInfo(){
+  const h = store.get(SK("hostSave"), null);
+  if(h && h.at && Date.now() - h.at < RESUME_MAX && (h.mode === "online" ? ONLINE_OK : (NATIVE || PARAMS.has("leader")))) return { host: true, d: h };
+  const a = store.get(SK("activeRoom"), null);
+  if(a && a.at && Date.now() - a.at < RESUME_MAX && (a.mode !== "online" || ONLINE_OK)) return { host: false, d: a };
+  return null;
+}
+function renderResume(){
+  const r = net ? null : resumeInfo();
+  $("wResume").classList.toggle("hidden", !r);
+  $("homeResume").classList.toggle("hidden", !r);
+  if(r){
+    const txt = r.host ? `🔄 رجّع غرفتك (${r.d.mode === "online" ? "أونلاين" : "واي فاي"})` : "🔄 رجوع للغرفة";
+    $("wResume").textContent = txt; $("homeResume").textContent = txt;
+  }
+}
+function doResume(){
+  const r = resumeInfo(); if(!r){ renderResume(); return; }
+  if(r.host) return r.d.mode === "online" ? hostOnline(r.d) : hostWifi(r.d);
+  if(r.d.mode === "online") return joinOnline(r.d.code);
+  return joinRoom(r.d.ip, r.d.port);
+}
+$("wResume").onclick = doResume;
+$("homeResume").onclick = () => { ensureProfile(() => { openWifi(); doResume(); }); };
+
 // ----- عرض الحالة (نفس الشي عند الكل) -----
 // كل شي مربوط بـ "رقم الغرفة:رقم الجولة" — غرفة جديدة تبدا من الجولة 1 وما تختلطش مع اللي قبلها
 let shownRound = "", spunRound = "", seenSent = "";
 function resetRoundView(){
-  shownRound = spunRound = seenSent = ""; voteShownNo = ""; votePick = null; voteSending = 0; roundPhoto = null; localPhoto = null;
+  shownRound = spunRound = seenSent = ""; voteShownNo = ""; votePick = null; voteSending = 0;
   ["wRevealBox", "wTie", "wVoteList"].forEach(id => { const e = $(id); if(e){ e.dataset.no = ""; e.dataset.key = ""; } });
 }
 function onState(s){
-  const prev = lastState; lastState = s;
+  const prev = lastState;
+  if(prev && prev.sid === s.sid && typeof s.v === "number" && typeof prev.v === "number" && s.v < prev.v) return;
+  lastState = s;
   if(!document.getElementById("s-w-room").classList.contains("on")) show("s-w-room");
   document.querySelectorAll("#s-w-room .host-only").forEach(e => e.classList.toggle("hidden", !isHost));
   document.querySelectorAll("#s-w-room .guest-only").forEach(e => e.classList.toggle("hidden", isHost));
 
   const host = s.players.find(p => p.host);
-  $("wRoomChip").textContent = "👑 غرفة " + (host ? host.name : s.roomName);
+  $("wRoomChip").textContent = (s.mode === "online" ? "🌍" : "📶") + " غرفة " + (host ? host.name : s.roomName);
+  if(typeof renderJoinReqs === "function") renderJoinReqs();
   const online = s.players.filter(p => p.online).length;
   const cnt = $("wCount");
   if(cnt.dataset.n !== String(online)){ cnt.dataset.n = online; cnt.innerHTML = `👥 ${online}`; cnt.classList.remove("bump"); void cnt.offsetWidth; cnt.classList.add("bump"); }
@@ -1089,11 +1179,15 @@ function onState(s){
   if(s.phase === "reveal") countRound(s);
 }
 function renderLobby(s){
-  $("wCodeBox").classList.toggle("hidden", !isHost || !s.ips.length);
-  $("wCode").textContent = s.ips.join("  •  ");
-  // رابط + QR لأصحاب الآيفون
-  const link = isHost && webLinks[0];
+  const isOnline = !!s.code;
+  $("wCodeBox").classList.toggle("hidden", !isHost || (!isOnline && !s.ips.length));
+  $("wCode").textContent = isOnline ? fmtCode(s.code) : s.ips.join("  •  ");
+  $("wCodeNote").textContent = isOnline ? "🌍 صحابك يدخلو من أي بلاصة بالإنترنت: ابعثلهم الدعوة ولا يكتبو الرمز" : "الرابط يفتح التطبيق مباشرة في الغرفة، ولا المتصفح إذا ما عندوش التطبيق";
+  // رابط + QR: أونلاين = رابط الدعوة، واي فاي = صفحة الآيفون
+  const link = isHost && (isOnline ? inviteLink() : webLinks[0]);
   $("wWebBox").classList.toggle("hidden", !link);
+  $("wWebLabel").textContent = isOnline ? "📷 صوّرو الكود باش تدخلو (آيفون ولا أندرويد)" : "📱 صحابك اللي عندهم آيفون";
+  $("wWebSmall").textContent = isOnline ? "يفتح الغرفة في التطبيق ولا في المتصفح" : "يصوّرو هذا الكود بالكاميرا، ولا يفتحو الرابط في Safari";
   if(link && $("wLink").textContent !== link){
     $("wLink").textContent = link;
     try{ const q = qrcode(0, "M"); q.addData(link); q.make(); $("wQr").innerHTML = q.createSvgTag({ cellSize: 5, margin: 2, scalable: true }); }catch(e){}
@@ -1101,17 +1195,20 @@ function renderLobby(s){
   const online = s.players.filter(p => p.online);
   $("wPlayersInfo").textContent = online.length < 3 ? `لازم ${3 - online.length} آخرين على الأقل` : `${online.length} لاعبين جاهزين`;
   const list = $("wPlayers");
-  const key = isHost + "|" + s.players.map(p => p.id + p.online + p.name + JSON.stringify(p.stats) + (pfpCache[p.id] ? "i" : "")).join("|");
+  const canFriend = p => ONLINE_OK && ON.ready && p.code && p.id !== myId && p.code !== ON.code && !friendOf(p.code);
+  const key = isHost + "|" + s.players.map(p => p.id + p.online + p.name + JSON.stringify(p.stats) + (pfpCache[p.id] ? "i" : "") + (canFriend(p) ? "f" : "") + (ON.fout[p.code] ? "o" : "")).join("|");
   if(list.dataset.key !== key){
     list.dataset.key = key;
     list.innerHTML = s.players.map(p => `<div class="pl ${p.online ? "" : "off"}" data-pid="${p.id}">
       ${avatarHTML(p.id, p.name)}
       <span class="n">${esc(p.name)}${p.id === myId ? " (أنت)" : ""}<span class="stats-mini">${statLine(p.stats)}</span></span>
       <span class="tag">${p.host ? "👑 القائد" : p.online ? "" : "غير متصل"}</span>
+      ${canFriend(p) ? (ON.fout[p.code] ? `<span class="mini wait">⏳</span>` : `<button class="mini ok" data-addf="${esc(p.code)}" title="زيدو صاحب">➕👥</button>`) : ""}
       ${isHost && !p.host ? `<button class="kick" data-kick="${p.id}">✕</button>` : ""}</div>`).join("");
     // اضغط على لاعب باش تشوف بطاقتو
     list.querySelectorAll(".pl").forEach(row => row.onclick = e => {
       if(e.target.closest("[data-kick]")) return;
+      const af = e.target.closest("[data-addf]"); if(af){ addFriend(af.dataset.addf).then(() => { list.dataset.key = ""; renderLobby(lastState); }); return; }
       showPlayerCard(lastState.players.find(x => x.id === row.dataset.pid));
     });
     list.querySelectorAll("[data-kick]").forEach(b => b.onclick = async () => {
@@ -1133,27 +1230,20 @@ function renderRound(s){
   const r = s.round, rk = s.sid + ":" + r.no;
   // جولة جديدة: نرجع البطاقة مقلوبة
   if(shownRound !== rk){
-    shownRound = rk; seenSent = ""; roundPhoto = null; localPhoto = null;
+    shownRound = rk; seenSent = "";
     $("wRevealBox").dataset.no = ""; $("wTie").dataset.no = "";
     $("wFlip").innerHTML = cardHTML(); $("wFlip").classList.remove("open");
     $("peekPop").classList.add("hidden");
     $("wSpin")._tok = ($("wSpin")._tok || 0) + 1; $("wSpin").textContent = ""; $("wRule").classList.add("hidden"); $("v-first").classList.remove("spinning");
     if(s.phase === "card") vibe([20, 30, 20]);
   }
-  // صورة الكلمة من القائد (تجي مرة وحدة) ولا اللي زدتها انت
-  if(r.me.photo) roundPhoto = r.me.photo;
-  const photo = r.me.isImp ? null : (roundPhoto || localPhoto);
-  fillCard($("wFlip"), { ...r.me, photo, againText: "سيّب صبعك باش تخبّيها" });
-  const look = cardLook({ ...r.me, photo });
+  fillCard($("wFlip"), { ...r.me, againText: "سيّب صبعك باش تخبّيها" });
+  const look = { def: defLine(r.me) };
   // كلمتي تبقى متاحة طول الجولة (ضغط مطوّل)
   $("peekCat").textContent = "الفئة: " + (r.me.isImp && !r.me.hint ? "؟" : r.me.catName);
   $("peekWord").textContent = r.me.isImp ? "أنت المحتال 🤫" : r.me.word;
   $("peekDef").textContent = look.def;
   $("peekDef").classList.toggle("hidden", !look.def);
-  if(look.photo){ if($("peekImg").getAttribute("src") !== look.photo) $("peekImg").src = look.photo; $("peekImg").classList.remove("hidden"); } else $("peekImg").classList.add("hidden");
-  // زر "زيد صورة" وسط اللعب: إذا الكلمة ما عندهاش صورة. يبان حتى للمحتال (نفس الشاشة للكل)
-  const canAdd = !photo && !r.me.hasPhoto && s.settings.showDef !== false && (s.phase === "card" || s.phase === "first");
-  document.querySelectorAll("[data-addphoto]").forEach(b => b.classList.toggle("hidden", !canAdd));
   $("wSeen").textContent = `👀 شافو كلمتهم: ${r.seen} / ${r.count}`;
   $("wFirst").textContent = r.seen >= r.count ? "الكل شاف! شكون يبدأ؟ 🎲" : `شكون يبدأ؟ 🎲 (${r.seen}/${r.count} شافو)`;
 
@@ -1184,7 +1274,7 @@ function renderRound(s){
       vibe([30, 50, 30]);
     }
   } else tieBox.classList.add("hidden");
-  $("wVote").textContent = r.tie ? "🗳️ عاودو التصويت" : "🗳️ تصويت: شكون المحتال؟";
+  $("wVote").textContent = r.tie ? "🗳️ عاودو التصويت" : "🗳️ تصويت: مين المحتال؟";
 
   if(s.phase === "vote" && r.vote) renderVote(r);
 
@@ -1233,19 +1323,6 @@ $("wFirst").onclick = async () => {
   if(r.seen.length < r.ids.length && !await ask(`مازال ${r.ids.length - r.seen.length} ما شافوش كلمتهم. نكملو؟`)) return;
   room.pickFirst();
 };
-
-// زيد صورة للكلمة وسط اللعب (أونلاين)
-let roundPhoto = null, localPhoto = null;
-document.querySelectorAll("[data-addphoto]").forEach(b => b.onclick = async () => {
-  const r = lastState && lastState.round;
-  if(!r || !r.me) return;
-  if(r.me.isImp){ toast("🤫 أنت المحتال… ما تقدرش تزيد صورة"); return; }
-  if(!r.me.catId) return;
-  const img = await addPhotoMidGame(r.me.catId, r.me.word);
-  if(!img) return;
-  if(isHost && room) room.setRoundPhoto(img);       // القائد: تبان عند الجميع
-  else { localPhoto = img; onState(lastState); }   // لاعب: تتسجل في هاتفو
-});
 
 // ----- شاشة التصويت -----
 let votePick = null, voteShownNo = "", voteSending = 0;
@@ -1353,7 +1430,7 @@ function renderWordList(){
   $("wcCount").textContent = c.list.length;
   $("wcList").innerHTML = words.length ? words.map(w => `<div class="wrow ${picked.has(w) ? "sel" : ""}" data-w="${esc(w)}"><span class="ck"></span>
       <span class="w">${esc(w)}<small>${esc(getDef(c.id, w) || "— بلا تعريف")}</small></span>
-      ${hasPhoto(c.id, w) ? `<span class="ph">📷</span>` : ""}${(e.added || []).includes(w) ? `<span class="new">جديدة</span>` : ""}
+      ${(e.added || []).includes(w) ? `<span class="new">جديدة</span>` : ""}
       <button class="edit" data-edit="${esc(w)}" aria-label="تعديل">✏️</button></div>`).join("")
     : `<div class="small" style="text-align:center;padding:16px">${$("wcSearch").value.trim() ? "ما لقينا حتى كلمة" : "الفئة فارغة — زيد كلمات!"}</div>`;
   $("wcList").querySelectorAll(".wrow").forEach(row => row.onclick = ev => {
@@ -1386,9 +1463,8 @@ $("wcDel").onclick = async () => {
   for(const w of picked){
     if(ed.added.includes(w)) ed.added = ed.added.filter(x => x !== w);
     else if(!ed.removed.includes(w)) ed.removed.push(w);
-    // الكلمة تتمسح مع تعريفها وصورتها
+    // الكلمة تتمسح مع تعريفها
     delete ed.defs[w];
-    if(photoIndex.has(photoKey(editCat.id, w))) deletePhoto(editCat.id, w);
   }
   picked.clear(); saveEdits(); renderWordList();
   toast(`🗑️ تنحّاو ${n} ${n === 1 ? "كلمة" : "كلمات"}`); vibe(20);
@@ -1406,42 +1482,27 @@ function addToCat(catId, raw, rawDef){
   c.list.unshift(w);
   return true;
 }
-let newWordPhoto = null;
-$("wcNewPhoto").onclick = async () => {
-  const img = await pickImage(480); if(!img) return;
-  newWordPhoto = img; $("wcNewPhotoPrev").src = img; $("wcNewPhotoPrev").classList.remove("hidden");
-};
 async function addWord(){
   const w = $("wcNew").value.trim().replace(/\s+/g, " ");
   const def = $("wcNewDef").value.trim().replace(/\s+/g, " ");
   if(!w){ toast("اكتب الكلمة ✍️"); $("wcNew").focus(); return; }
   if(def.length < 3){ toast("لازم تكتب تعريف للكلمة 📝"); $("wcNewDef").focus(); return; }
   if(!addToCat(editCat.id, w, def)){ toast("الكلمة موجودة ✔"); return; }
-  if(newWordPhoto) await savePhoto(editCat.id, w, newWordPhoto);
   saveEdits();
-  $("wcNew").value = ""; $("wcNewDef").value = ""; newWordPhoto = null; $("wcNewPhotoPrev").classList.add("hidden");
+  $("wcNew").value = ""; $("wcNewDef").value = "";
   $("wcNew").focus();
   toast("✅ تزادت: " + w); vibe(15); renderWordList();
 }
 
-// ----- تعديل كلمة: التعريف والصورة -----
-let wsWord = null, wsPhotoNew = undefined;   // undefined = ما تبدلتش، null = تنحّات
-async function openWordSheet(w){
-  wsWord = w; wsPhotoNew = undefined;
+// ----- تعديل كلمة: التعريف -----
+let wsWord = null;
+function openWordSheet(w){
+  wsWord = w;
   $("wsWord").textContent = w;
   $("wsDef").value = getDef(editCat.id, w);
-  showWsPhoto(await getPhoto(editCat.id, w));
   $("wordSheet").classList.remove("hidden");
 }
-function showWsPhoto(p){
-  $("wsPhoto").classList.toggle("hidden", !p); if(p) $("wsPhoto").src = p;
-  $("wsNoPhoto").classList.toggle("hidden", !!p);
-  $("wsDelPhoto").classList.toggle("hidden", !p);
-  $("wsPick").textContent = p ? "📷 بدّل الصورة" : "📷 اختار صورة";
-}
 function closeWordSheet(){ $("wordSheet").classList.add("hidden"); wsWord = null; }
-$("wsPick").onclick = async () => { const img = await pickImage(480); if(img){ wsPhotoNew = img; showWsPhoto(img); } };
-$("wsDelPhoto").onclick = () => { wsPhotoNew = null; showWsPhoto(null); };
 $("wsClose").onclick = closeWordSheet;
 $("wsSave").onclick = async () => {
   const w = wsWord; if(!w) return;
@@ -1449,8 +1510,6 @@ $("wsSave").onclick = async () => {
   if(def.length < 3){ toast("لازم تعريف للكلمة 📝"); return; }
   const ed = catEdits(editCat.id), base = editCat.defs[w];
   if(def === base) delete ed.defs[w]; else ed.defs[w] = def;
-  if(wsPhotoNew === null) await deletePhoto(editCat.id, w);
-  else if(wsPhotoNew) await savePhoto(editCat.id, w, wsPhotoNew);
   saveEdits(); closeWordSheet(); renderWordList(); toast("✅ تسجل"); vibe(15);
 };
 
@@ -1471,7 +1530,7 @@ function decodeWords(text){
 }
 function shareText(obj, label){
   const total = Object.values(obj.c).reduce((s, a) => s + a.length, 0);
-  return `شكون المحتال؟ ✏️ ${label} (${total} كلمة)\nافتح اللعبة ← تعديل الكلمات ← 📥 كلمات صاحبي، والصق هذا:\n#MOHTAL1#${encodeWords(obj)}`;
+  return `مين المحتال؟ ✏️ ${label} (${total} كلمة)\nافتح اللعبة ← تعديل الكلمات ← 📥 كلمات صاحبي، والصق هذا:\n#MOHTAL1#${encodeWords(obj)}`;
 }
 async function copyText(t){
   if(CLIP){ try{ await CLIP.write({ string: t }); return true; }catch(e){} }
@@ -1541,7 +1600,7 @@ function openImport(intoCat){
       if(n > 0){ closeSheet(); toast(`✅ تزادو ${n} كلمات من صاحبك`); vibe([20, 40, 20]); intoCat ? renderWordList() : renderWordCats(); }
     } });
 }
-// نشاركو الكلمة مع تعريفها (الصور تبقى في الهاتف)
+// نشاركو الكلمة مع تعريفها
 const withDefs = (catId, words) => words.map(w => [w, getDef(catId, w)]);
 $("wcShare").onclick = () => {
   const ed = wordEdits[editCat.id];
@@ -1554,26 +1613,24 @@ $("shareAll").onclick = () => {
 };
 $("importAll").onclick = () => openImport(null);
 
-// ----- تصدير / استرجاع البيانات (كلمات + تعريفات + صور) -----
+// ----- تصدير / استرجاع البيانات (كلمات + تعريفات) -----
 const FS = NATIVE ? getPlugin("Filesystem") : null;
 $("exportData").onclick = async () => {
-  const photos = {};
-  for(const k of await photoDB.keys()){ const v = await photoDB.get(k); if(v) photos[k] = v; }
-  const data = { app: "mohtal", v: 1, date: new Date().toISOString(), by: profile ? profile.nick : "", wordEdits, photos };
+  const data = { app: "mohtal", v: 2, date: new Date().toISOString(), by: profile ? profile.nick : "", wordEdits };
   const json = JSON.stringify(data);
   const nWords = Object.values(wordEdits).reduce((s, e) => s + (e.added ? e.added.length : 0), 0);
   const name = `mohtal-data-${new Date().toISOString().slice(0, 10)}.json`;
   try{
     if(FS && SHARE){
       const r = await FS.writeFile({ path: name, data: json, directory: "CACHE", encoding: "utf8" });
-      await SHARE.share({ title: "بيانات شكون المحتال؟", files: [r.uri], dialogTitle: "احفظ ولا ابعث الملف" });
+      await SHARE.share({ title: "بيانات مين المحتال؟", files: [r.uri], dialogTitle: "احفظ ولا ابعث الملف" });
     } else {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([json], { type: "application/json" }));
       a.download = name; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     }
-    toast(`📦 تصدّرو ${nWords} كلمة و ${Object.keys(photos).length} صورة`);
+    toast(`📦 تصدّرو ${nWords} كلمة`);
   }catch(e){ if(!String(e && e.message).match(/cancel/i)) toast("ما قدرناش نصدرو الملف"); }
 };
 $("importData").onclick = () => {
@@ -1582,9 +1639,9 @@ $("importData").onclick = () => {
   inp.onchange = async () => {
     const f = inp.files && inp.files[0]; if(!f) return;
     let data; try{ data = JSON.parse(await f.text()); }catch(e){ toast("الملف ماشي صحيح"); return; }
-    if(!data || data.app !== "mohtal"){ toast("هذا ماشي ملف تاع شكون المحتال؟"); return; }
-    if(!await ask("نزيدو الكلمات والتعريفات والصور اللي في الملف لهاتفك؟")) return;
-    let nw = 0, np = 0;
+    if(!data || data.app !== "mohtal"){ toast("هذا ماشي ملف تاع مين المحتال؟"); return; }
+    if(!await ask("نزيدو الكلمات والتعريفات اللي في الملف لهاتفك؟")) return;
+    let nw = 0;
     for(const [cid, e] of Object.entries(data.wordEdits || {})){
       if(!catById(cid)) continue;
       const ed = catEdits(cid);
@@ -1592,11 +1649,8 @@ $("importData").onclick = () => {
       for(const w of e.removed || []) if(!ed.removed.includes(w)){ ed.removed.push(w); }
       for(const [w, d] of Object.entries(e.defs || {})) if(!ed.defs[w]) ed.defs[w] = d;
     }
-    for(const [k, v] of Object.entries(data.photos || {})){
-      if(typeof v === "string" && v.startsWith("data:image/") && !photoIndex.has(k)){ await photoDB.set(k, v); photoIndex.add(k); np++; }
-    }
     saveEdits(); renderWordCats();
-    toast(`✅ ترجعو ${nw} كلمة و ${np} صورة`); vibe([20, 40, 20]);
+    toast(`✅ ترجعو ${nw} كلمة`); vibe([20, 40, 20]);
   };
   inp.click();
 };
@@ -1607,9 +1661,7 @@ $("wcNew").onkeydown = e => { if(e.key === "Enter") addWord(); };
 $("wcSearch").oninput = renderWordList;
 $("wordsBack").addEventListener("click", () => picked.clear());
 $("wcReset").onclick = async () => {
-  if(!await ask(`ترجّع الكلمات الأصلية تاع "${editCat.name}"؟ الكلمات اللي زدتها رايحين يتحاو مع تعريفاتهم وصورهم.`)) return;
-  const ed = wordEdits[editCat.id];
-  if(ed) for(const w of ed.added || []) if(photoIndex.has(photoKey(editCat.id, w))) await deletePhoto(editCat.id, w);
+  if(!await ask(`ترجّع الكلمات الأصلية تاع "${editCat.name}"؟ الكلمات اللي زدتها رايحين يتحاو مع تعريفاتهم.`)) return;
   delete wordEdits[editCat.id]; saveEdits(); renderWordList(); toast("↩️ رجعت الكلمات الأصلية");
 };
 
@@ -1623,6 +1675,7 @@ if(APP){
     const on = document.querySelector(".screen.on");
     if(!on || on.id === "s-home" || (on.id === "s-profile" && !hasProfile())) APP.exitApp();
     else if(on.id === "s-w-find") document.querySelector("[data-wback]").click();
+    else if(on.id === "s-friends") openWifi();
     else if(on.id === "s-words-cat") $("wordsBack").click();
     else if(on.id === "s-w-room") $("wLeave").click();
     else if(on.id.startsWith("s-pass") && on.id !== "s-pass-setup") document.querySelector("[data-quit-pass]").click();
@@ -1635,4 +1688,5 @@ renderHomeProfile();
 // الموقع يخدم بلا إنترنت بعد أول زيارة
 if(!NATIVE && location.protocol === "https:" && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
-boot();
+// نبداو كي يكملو كل السكريبتات (online.js يجي من بعد app.js)
+if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else setTimeout(boot, 0);

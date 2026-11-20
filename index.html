@@ -4,15 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#151229">
-<title>شكون المحتال؟</title>
+<title>مين المحتال؟</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-512.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="المحتال">
-<meta name="description" content="شكون المحتال؟ لعبة جماعية بالعربية — صُنع بواسطة Chaker Red">
+<meta name="apple-mobile-web-app-title" content="مين المحتال؟">
+<meta name="description" content="مين المحتال؟ لعبة جماعية بالعربية — صُنع بواسطة Chaker Red">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -21,9 +21,9 @@
 <!-- ===== أول تشغيل: الأذونات ===== -->
 <section class="screen" id="s-perm">
   <div class="center">
-    <img src="icon.svg" class="logo pop" alt="">
+    <img src="icon-512.png" class="logo pop" alt="">
     <div class="big">مرحبا بيك! 👋</div>
-    <p class="lead">باش تلعب مع صحابك في نفس الواي فاي، اللعبة تحتاج إذن <b>الأجهزة القريبة والشبكة المحلية</b>.<br>هذا الطلب مرة وحدة برك.</p>
+    <p class="lead">باش تلعب مع صحابك في نفس الواي فاي (بلا إنترنت)، اللعبة تحتاج إذن <b>الأجهزة القريبة والشبكة المحلية</b>.<br>هذا الطلب مرة وحدة برك.</p>
     <ul class="perm-list">
       <li>📶 <span>تلقى الغرف تاع صحابك في نفس الواي فاي</span></li>
       <li>👑 <span>تفتح غرفة وصحابك يدخلو فيها</span></li>
@@ -36,8 +36,8 @@
 <!-- ===== شاشة البداية ===== -->
 <section class="screen" id="s-splash">
   <div class="center splash">
-    <img src="icon.svg" class="logo big-logo" alt="">
-    <div class="title-xl">شكون <span>المحتال؟</span></div>
+    <img src="icon-512.png" class="logo big-logo" alt="">
+    <div class="title-xl">مين <span>المحتال؟</span></div>
     <div class="made">صُنع بواسطة</div>
     <div class="sign">Chaker Red</div>
   </div>
@@ -63,7 +63,9 @@
       <input class="field" id="pfName" maxlength="20" placeholder="مثال: شاكر" autocomplete="off">
       <label class="pf-l" for="pfNick">لقبك في اللعب 😎</label>
       <input class="field" id="pfNick" maxlength="14" placeholder="مثال: الذيب" autocomplete="off">
-      <div class="small">اللقب هو اللي يبان لصحابك في الغرفة: <b id="pfPreview">لقبك</b></div>
+      <label class="pf-l">صحابك يشوفوك بـ:</label>
+      <div class="pick-row" id="pfShow"><button type="button" data-show="nick">😎 لقبي</button><button type="button" data-show="name">🪪 اسمي</button></div>
+      <div class="small">يبان لصحابك في الغرفة هكذا: <b id="pfPreview">لقبك</b></div>
     </div>
   </div>
   <button class="btn" id="pfSave">يلا نبداو ✔</button>
@@ -73,13 +75,19 @@
 <section class="screen" id="s-home">
   <button class="me-chip" id="homeProfile"><span class="av" id="homeAv">؟</span><span id="homeNick"></span><span class="ed-ic">✏️</span></button>
   <div class="home-head">
-    <img src="icon.svg" class="logo" alt="">
-    <h1>شكون <span>المحتال؟</span></h1>
+    <img src="icon-512.png" class="logo" alt="">
+    <h1>مين <span>المحتال؟</span></h1>
     <p class="sub">لعبة جماعية للأصحاب</p>
   </div>
+  <button class="btn resume hidden" id="homeResume">🔄 رجوع للغرفة</button>
   <button class="mode" id="goWifi">
-    <span class="mi">📶</span>
-    <span><b>العب مع صحابك</b><small>كل واحد بهاتفو، في نفس الواي فاي</small></span>
+    <span class="mi">🌍</span>
+    <span><b>العب مع صحابك</b><small>كل واحد بهاتفو — بالإنترنت ولا في نفس الواي فاي</small></span>
+  </button>
+  <button class="mode alt slim" data-friends>
+    <span class="mi">👥</span>
+    <span><b>أصحابي</b><small>زيد صحابك وادخل لغرفهم</small></span>
+    <span class="badge hidden" data-frbadge></span>
   </button>
   <button class="mode alt" id="goPass">
     <span class="mi">📱</span>
@@ -104,7 +112,7 @@
     <button class="btn ghost small-btn" id="exportData">📦 تصدير بياناتي</button>
     <button class="btn ghost small-btn" id="importData">📂 استرجاع بياناتي</button>
   </div>
-  <div class="small" style="text-align:center">التصدير يحفظ كلماتك وتعريفاتك وصورك في ملف واحد</div>
+  <div class="small" style="text-align:center">التصدير يحفظ كلماتك وتعريفاتك في ملف واحد</div>
   <div class="wcats" id="wcats"></div>
 </section>
 
@@ -116,8 +124,6 @@
     <input class="field wide" id="wcNew" maxlength="30" placeholder="الكلمة" style="margin-top:8px">
     <input class="field wide" id="wcNewDef" maxlength="80" placeholder="التعريف (لازم) — مثال: حيوان يعيش في الغابة" style="margin-top:8px">
     <div class="row" style="margin-top:8px">
-      <button class="btn ghost small-btn" id="wcNewPhoto">📷 صورة (اختياري)</button>
-      <img class="mini-photo hidden" id="wcNewPhotoPrev" alt="">
       <button class="btn small-btn" id="wcAdd">زيد ✔</button>
     </div>
   </div>
@@ -164,7 +170,6 @@
     <div class="big pname" id="passName"></div>
     <div class="flip" id="pFlip"></div>
   </div>
-  <button class="btn ghost small-btn hidden add-photo" id="pAddPhoto">📷 زيد صورة لهذي الكلمة</button>
   <button class="btn hidden" id="pNext">فهمت، خبّي ومرّر ⬅</button>
 </section>
 
@@ -192,34 +197,66 @@
   <button class="btn ghost" id="pBack">تبديل الفئات أو اللاعبين</button>
 </section>
 
-<!-- ===== واي فاي: الاسم ===== -->
+<!-- ===== العب مع صحابك ===== -->
 <section class="screen" id="s-w-name">
-  <div class="top"><button class="x" data-home>➜</button><span class="chip">📶 العب مع صحابك</span><span class="sp"></span></div>
-  <div class="center">
-    <div class="emoji">👋</div>
-    <div class="big">مرحبا <span class="pname" id="wHello"></span></div>
+  <div class="top"><button class="x" data-home>➜</button><span class="chip">🌍 العب مع صحابك</span><span class="sp"></span></div>
+  <div class="center tight">
+    <div class="big">مرحبا <span class="pname" id="wHello"></span> 👋</div>
     <button class="link" id="wEditName">✏️ بدّل اسمك</button>
     <input type="hidden" id="wName">
-    <div class="small">كل الصحاب لازم يكونو في نفس الواي فاي،<br>ولا متصلين بنقطة الاتصال (هوتسبوت) تاع القائد.</div>
   </div>
-  <button class="btn" id="wHost">👑 إنشاء غرفة</button>
-  <button class="btn ghost" id="wJoin">🔎 انضمام لغرفة</button>
+  <button class="btn resume hidden" id="wResume">🔄 رجوع للغرفة</button>
+  <div class="online-box" id="wOnlineBox">
+    <div class="sep-label">🌍 أونلاين — صحابك من أي بلاصة</div>
+    <button class="btn" id="wHostOnline">👑 افتح غرفة أونلاين</button>
+    <button class="btn ghost" id="wJoinCode">🔗 ادخل بالرمز ولا الرابط</button>
+    <button class="btn ghost" data-friends>👥 أصحابي <span class="badge hidden" data-frbadge></span></button>
+    <div class="small" id="wOnlineSt"></div>
+  </div>
+  <div class="online-box" id="wLocalBox">
+    <div class="sep-label">📶 بلا إنترنت — نفس الواي فاي ولا الهوتسبوت</div>
+    <div class="row2">
+      <button class="btn ghost small-btn" id="wHost">📶 افتح غرفة محلية</button>
+      <button class="btn ghost small-btn" id="wJoin">📶 الغرف القريبة</button>
+    </div>
+  </div>
   <div class="small web-note hidden" id="wWebNote">👑 الغرفة يفتحها القائد من تطبيق أندرويد.<br>أنت تقدر تدخل لغرفة صحابك من الزر اللي فوق ☝️</div>
 </section>
 
 <!-- ===== واي فاي: البحث عن غرف ===== -->
 <section class="screen" id="s-w-find">
-  <div class="top"><button class="x" data-wback>➜</button><span class="chip">🔎 الغرف القريبة</span><span class="sp"></span></div>
+  <div class="top"><button class="x" data-wback>➜</button><span class="chip" id="wFindChip">🔗 ادخل لغرفة</span><span class="sp"></span></div>
   <div class="searching" id="wSearching"><span class="radar"></span><span>نقلبو على غرف في نفس الواي فاي…</span></div>
   <div class="rooms" id="rooms"></div>
   <div class="panel">
-    <div class="label">ما لقيتش الغرفة؟</div>
-    <div class="small">اكتب رمز الغرفة اللي يبان عند القائد</div>
+    <div class="label">🔑 رمز الغرفة</div>
+    <div class="small">اكتب الرمز اللي يبان عند القائد (ولا الصق رابط الدعوة)</div>
     <div class="row" style="margin-top:10px">
-      <input class="field" id="wIp" inputmode="decimal" placeholder="مثال: 192.168.1.5" dir="ltr">
+      <input class="field" id="wIp" autocapitalize="characters" autocomplete="off" placeholder="ABCD-EFGH" dir="ltr">
       <button class="btn small-btn" id="wIpGo">دخول</button>
     </div>
   </div>
+</section>
+
+<!-- ===== صحابي ===== -->
+<section class="screen" id="s-friends">
+  <div class="top"><button class="x" id="fBack">➜</button><span class="chip">👥 أصحابي</span><span class="sp"></span></div>
+  <div class="panel code-panel">
+    <div class="small">الكود تاعك — عطيه لصحابك باش يزيدوك (اضغط تنسخو)</div>
+    <button class="code copyable" id="fMyCode" dir="ltr">…</button>
+    <div class="share-row" style="margin-top:8px"><button class="btn small-btn" id="fShare">📤 ابعث الكود لصحابك</button></div>
+  </div>
+  <div class="panel">
+    <div class="label">➕ زيد صاحب بالكود تاعو</div>
+    <div class="row" style="margin-top:8px"><input class="field" id="fAddCode" autocapitalize="characters" autocomplete="off" placeholder="ABCD-EFGH" dir="ltr" maxlength="9"><button class="btn small-btn" id="fAdd">زيد</button></div>
+    <div id="fOut"></div>
+  </div>
+  <div class="panel hidden" id="fReqBox"><div class="label">📥 طلبات الصداقة</div><div class="plist" id="fReqs"></div></div>
+  <div class="panel">
+    <div class="row"><div class="label">صحابي</div><div class="small" id="fInfo"></div></div>
+    <div class="plist" id="fList"></div>
+  </div>
+  <div class="small" style="text-align:center" id="fConn"></div>
 </section>
 
 <!-- ===== واي فاي: الغرفة / اللعب ===== -->
@@ -229,7 +266,8 @@
     <span class="chip" id="wRoomChip"></span>
     <span class="count" id="wCount"></span>
   </div>
-  <div class="conn hidden" id="wConn">⏳ إعادة الاتصال…</div>
+  <div class="conn hidden" id="wConn">⏳ إعادة الاتصال… (ما تخرجش، نرجعو وحدنا)</div>
+  <div class="panel reqs hidden" id="wReqs"></div>
 
   <!-- اللوبي -->
   <div id="v-lobby" class="view">
@@ -240,10 +278,10 @@
         <button class="btn small-btn" id="wInvite">📤 ابعث الدعوة</button>
         <button class="btn ghost small-btn" id="wCopyCode">📋 نسخ الرمز</button>
       </div>
-      <div class="small">الرابط يفتح التطبيق مباشرة في الغرفة، ولا المتصفح إذا ما عندوش التطبيق</div>
+      <div class="small" id="wCodeNote"></div>
       <div class="web-join hidden" id="wWebBox">
-        <div class="label">📱 صحابك اللي عندهم آيفون</div>
-        <div class="small">يصوّرو هذا الكود بالكاميرا، ولا يفتحو الرابط في Safari</div>
+        <div class="label" id="wWebLabel">📱 صحابك اللي عندهم آيفون</div>
+        <div class="small" id="wWebSmall">يصوّرو هذا الكود بالكاميرا، ولا يفتحو الرابط في Safari</div>
         <div class="qr" id="wQr"></div>
         <div class="code small-code" id="wLink" dir="ltr"></div>
       </div>
@@ -268,7 +306,6 @@
     <div class="center">
       <div class="small" id="wCardTop">اضغط مطوّل على البطاقة باش تشوف كلمتك — كي تسيّب تتخبّى</div>
       <div class="flip" id="wFlip"></div>
-      <button class="btn ghost small-btn hidden add-photo" data-addphoto>📷 زيد صورة لهذي الكلمة</button>
       <div class="seen" id="wSeen"></div>
     </div>
     <div class="sticky">
@@ -285,10 +322,9 @@
       <div class="spin" id="wSpin"></div>
       <div class="small rule hidden" id="wRule">كل واحد يقول كلمة وحدة على كلمتو بلا ما يفضحها،<br>ومن بعد تناقشو وتصوتو على المحتال.</div>
       <button class="peek" data-peek>👁️ اضغط مطوّل باش تشوف كلمتك</button>
-      <button class="btn ghost small-btn hidden add-photo" data-addphoto>📷 زيد صورة لهذي الكلمة</button>
     </div>
     <div class="sticky">
-      <button class="btn host-only" id="wVote">🗳️ تصويت: شكون المحتال؟</button>
+      <button class="btn host-only" id="wVote">🗳️ تصويت: مين المحتال؟</button>
       <div class="wait guest-only">تناقشو… القائد رايح يفتح التصويت 🗳️</div>
     </div>
   </div>
@@ -296,7 +332,7 @@
   <!-- التصويت -->
   <div id="v-vote" class="view">
     <div class="vote-head">
-      <div class="big">🗳️ شكون المحتال؟</div>
+      <div class="big">🗳️ مين المحتال؟</div>
       <div class="small" id="wVoteInfo">اختار اللاعب اللي تشك فيه، ومن بعد أكّد صوتك</div>
     </div>
     <div class="vlist" id="wVoteList"></div>
@@ -331,7 +367,7 @@
 </div>
 
 <!-- كلمتي: تبان غير وقت الضغط المطوّل -->
-<div class="peek-pop hidden" id="peekPop"><div class="peek-card"><div class="cat-l" id="peekCat"></div><img class="wphoto hidden" id="peekImg" alt=""><div class="word" id="peekWord"></div><div class="def hidden" id="peekDef"></div><div class="hint">سيّب صبعك باش تخبّيها</div></div></div>
+<div class="peek-pop hidden" id="peekPop"><div class="peek-card"><div class="cat-l" id="peekCat"></div><div class="word" id="peekWord"></div><div class="def hidden" id="peekDef"></div><div class="hint">سيّب صبعك باش تخبّيها</div></div></div>
 <!-- بطاقة اللاعب: إحصائياتو في اللعب أونلاين -->
 <div class="modal hidden" id="pcard"><div class="mbox pc">
   <div class="pf-av" id="pcAv">؟</div>
@@ -346,18 +382,11 @@
   <div class="small" id="pcGames"></div>
   <button class="btn ghost" id="pcClose">رجوع</button>
 </div></div>
-<!-- تعديل كلمة: التعريف والصورة -->
+<!-- تعديل كلمة: التعريف -->
 <div class="modal hidden" id="wordSheet"><div class="mbox sheet">
   <div class="big" id="wsWord"></div>
   <label class="pf-l" for="wsDef">التعريف</label>
   <textarea id="wsDef" rows="2" maxlength="80"></textarea>
-  <div class="label">📷 الصورة</div>
-  <img class="ws-photo hidden" id="wsPhoto" alt="">
-  <div class="small" id="wsNoPhoto">ما عندهاش صورة</div>
-  <div class="share-row">
-    <button class="btn ghost small-btn" id="wsPick">📷 اختار صورة</button>
-    <button class="btn ghost small-btn hidden" id="wsDelPhoto">🗑️ نحّي الصورة</button>
-  </div>
   <div class="mbtns"><button class="btn" id="wsSave">حفظ ✔</button><button class="btn ghost" id="wsClose">رجوع</button></div>
 </div></div>
 <!-- مشاركة / استيراد الكلمات -->
@@ -375,6 +404,7 @@
 <script src="config.js"></script>
 <script src="capacitor.js"></script>
 <script src="qrcode.js"></script>
+<script src="mqtt.min.js"></script>
 <script src="words.js"></script>
 <script src="words2.js"></script>
 <script src="words3.js"></script>
@@ -386,7 +416,7 @@
 <script src="defs6.js"></script>
 <script src="defs7.js"></script>
 <script src="defs8.js"></script>
-<script src="photos.js"></script>
 <script src="app.js"></script>
+<script src="online.js"></script>
 </body>
 </html>

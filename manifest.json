@@ -1,7 +1,7 @@
 {
-  "name": "شكون المحتال؟",
-  "short_name": "المحتال",
-  "description": "لعبة المحتال بالعربية — صُنع بواسطة Chaker Red",
+  "name": "مين المحتال؟",
+  "short_name": "مين المحتال؟",
+  "description": "مين المحتال؟ لعبة جماعية بالعربية — صُنع بواسطة Chaker Red",
   "lang": "ar",
   "dir": "rtl",
   "start_url": "./index.html",

@@ -281,3 +281,32 @@ h1 span,.title-xl span{color:var(--accent)}
 .confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:10}
 .confetti i{position:absolute;top:-20px;width:10px;height:16px;border-radius:3px;animation:fall linear forwards}
 @keyframes fall{to{transform:translateY(110vh) rotate(720deg)}}
+
+.pick-row{display:flex;gap:8px;width:100%}
+.pick-row button{flex:1;padding:10px 6px;border-radius:14px;background:var(--card);border:2px solid var(--line);font-weight:800;color:inherit;font-family:inherit;font-size:15px;transition:transform .15s}
+.pick-row button.on{border-color:var(--accent);color:var(--accent);background:rgba(255,207,63,.08)}
+.pick-row button:active{transform:scale(.95)}
+
+/* ===== الأونلاين والأصحاب ===== */
+.center.tight{flex:0;gap:6px;padding-top:6px}
+.online-box{display:flex;flex-direction:column;gap:10px;width:100%}
+.sep-label{font-size:13px;font-weight:800;color:var(--muted);text-align:center;margin-top:6px;display:flex;align-items:center;gap:8px}
+.sep-label::before,.sep-label::after{content:"";flex:1;height:1px;background:var(--line)}
+.row2{display:flex;gap:8px}
+.row2 .btn{flex:1;font-size:15px;padding:12px 8px}
+.btn.resume{background:linear-gradient(135deg,#3fe0a5,#1fb57f);color:#0c2a20;box-shadow:0 6px 0 #127a55;animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{transform:scale(1.03)}}
+.badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--accent2);color:#fff;font-size:13px;font-weight:900;margin-inline-start:6px;vertical-align:middle}
+.mode .badge{margin-inline-start:auto}
+.badge.hidden{display:none}
+.mini{flex:none;padding:7px 10px;border-radius:12px;font-size:13px;font-weight:900;background:var(--bg2);color:var(--text);border:1px solid var(--line);white-space:nowrap}
+.mini.ok{background:var(--ok);color:#0c2a20;border:0}
+.mini.no{background:#3b2440;color:#ff8da0;border:0}
+.mini.wait{opacity:.7}
+.mini:active{transform:scale(.94)}
+.reqs{border:2px solid var(--accent);animation:pop .35s var(--ease-back);display:flex;flex-direction:column;gap:8px}
+.reqs .label{color:var(--accent)}
+.out-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.pl.fr .stats-mini{font-weight:700}
+#fMyCode{font-size:28px;letter-spacing:2px}
+#wOnlineSt{text-align:center}
