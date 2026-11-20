@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="مين المحتال؟">
 <meta name="description" content="مين المحتال؟ لعبة جماعية بالعربية — صُنع بواسطة Chaker Red">
-<link rel="stylesheet" href="style.css?v=210">
+<link rel="stylesheet" href="style.css?v=220">
 </head>
 <body>
 <div class="app">
@@ -114,10 +114,10 @@
   </div>
   <div class="small" style="text-align:center">التصدير يحفظ كلماتك وتعريفاتك في ملف واحد</div>
   <div class="panel orig-panel">
-    <div class="label">📦 الكلمات الأصلية</div>
+    <div class="label">📦 الكلمات الأصلية 🔒 <span class="small">(تتشاف برك، ما تتعدلش)</span></div>
     <div class="small" id="origInfo"></div>
     <div id="origCats" class="orig-cats"></div>
-    <div class="share-row"><button class="btn ghost small-btn" id="origImport">📥 زيد من ملف</button><button class="btn ghost small-btn hidden" id="origDel">🗑️ نحّيها</button></div>
+    <div class="share-row"><button class="btn ghost small-btn" id="origImport">📥 زيد من ملف</button></div>
   </div>
   <div class="label" style="margin-top:4px">🤖 كلمات Claude (تتعدل)</div>
   <div class="wcats" id="wcats"></div>
@@ -126,7 +126,8 @@
 <!-- ===== تعديل الكلمات: فئة وحدة ===== -->
 <section class="screen" id="s-words-cat">
   <div class="top"><button class="x" id="wordsBack">➜</button><span class="chip" id="wcTitle"></span><span class="count" id="wcCount"></span></div>
-  <div class="panel">
+  <div class="small info-box ro-show">🔒 هذي من <b>الكلمات الأصلية</b> — تقدر تشوفها برك، ما تتبدلش.</div>
+  <div class="panel ro-hide">
     <div class="label">➕ زيد كلمة</div>
     <input class="field wide" id="wcNew" maxlength="30" placeholder="الكلمة" style="margin-top:8px">
     <input class="field wide" id="wcNewDef" maxlength="80" placeholder="التعريف (لازم) — مثال: حيوان يعيش في الغابة" style="margin-top:8px">
@@ -134,17 +135,17 @@
       <button class="btn small-btn" id="wcAdd">زيد ✔</button>
     </div>
   </div>
-  <div class="share-row">
+  <div class="share-row ro-hide">
     <button class="btn ghost small-btn" id="wcShare">📤 شارك كلماتي</button>
     <button class="btn ghost small-btn" id="wcImport">📥 كلمات صاحبي</button>
   </div>
   <input class="field search" id="wcSearch" placeholder="🔎 قلّب على كلمة">
-  <div class="sel-bar">
+  <div class="sel-bar ro-hide">
     <button class="link" id="wcSelAll">☑️ تحديد الكل</button>
     <span class="small" id="wcSelInfo">اضغط على الكلمات باش تحددهم</span>
   </div>
   <div class="wlist" id="wcList"></div>
-  <div class="sticky">
+  <div class="sticky ro-hide">
     <button class="btn red hidden" id="wcDel">🗑️ نحّي المحددين</button>
     <button class="btn ghost hidden" id="wcReset">↩️ رجّع الكلمات الأصلية</button>
   </div>
@@ -413,7 +414,7 @@
 <script src="config.js"></script>
 <script src="capacitor.js"></script>
 <script src="qrcode.js"></script>
-<script src="mqtt.min.js?v=210"></script>
+<script src="mqtt.min.js?v=220"></script>
 <script src="words.js"></script>
 <script src="words2.js"></script>
 <script src="words3.js"></script>
@@ -425,7 +426,7 @@
 <script src="defs6.js"></script>
 <script src="defs7.js"></script>
 <script src="defs8.js"></script>
-<script src="app.js?v=210"></script>
-<script src="online.js?v=210"></script>
+<script src="app.js?v=220"></script>
+<script src="online.js?v=220"></script>
 </body>
 </html>

@@ -80,24 +80,43 @@ function avColor(id){ let h = 0; for(const c of String(id)) h = (h * 31 + c.char
 const CATS = RAW_CATEGORIES.map(c => ({ id: c.id, icon: c.icon, name: c.name.replace(" 🇩🇿", ""),
   base: [...new Set(c.words.split("\n").map(s => s.trim()).filter(Boolean))], list: [] }));
 const catById = id => CATS.find(c => c.id === id) || ORIG_CATS.find(c => c.id === id);
+// غير كلمات Claude يتعدلو — الكلمات الأصلية مقفولة 🔒
+const claudeCat = id => CATS.find(c => c.id === id);
 // ----- باقات الكلمات -----
-// 🤖 كلمات Claude: اللي جات مع اللعبة • 📦 الكلمات الأصلية: يزيدها صاحب الهاتف من ملف (تبقى في هاتفو برك)
+// 🤖 كلمات Claude: اللي جات مع اللعبة (تتعدل) • 📦 الكلمات الأصلية: يزيدها صاحب الهاتف من ملف (تبقى في هاتفو برك، ما تتعدلش)
+// 🤝 الزوج: الفئات اللي كاينة في الزوج يتخلطو، والفئات الجديدة تاع الأصلية يبانو وحدهم
 // في الغرفة، الكلمات تتختار في هاتف القائد: اللاعبين ما يحتاجوش الباقة
-const PACKS = { claude: "🤖 كلمات Claude", orig: "📦 الكلمات الأصلية" };
-let ORIG_CATS = [];
+const PACKS = { claude: "🤖 كلمات Claude", orig: "📦 الكلمات الأصلية", both: "🤝 Claude + الأصلية" };
+const PACK_BTN = { claude: "🤖 Claude", orig: "📦 الأصلية", both: "🤝 الزوج" };
+const PACK_IDS = ["claude", "orig", "both"];
+let ORIG_CATS = [], bothCache = null;
 function loadOrig(){
   const p = store.get("origPack", null);
   ORIG_CATS = !p || !Array.isArray(p.cats) ? [] : p.cats.map((c, i) => {
-    const base = [...new Set((c.words || []).map(w => String(w).trim().replace(/\s+/g, " ")).filter(w => w && w.length <= 40))];
-    return { id: "o" + i, icon: String(c.icon || "📦").slice(0, 4), name: String(c.name || "فئة " + (i + 1)).slice(0, 30), base, list: base.slice(), defs: {}, orig: true };
+    const base = Object.freeze([...new Set((c.words || []).map(w => String(w).trim().replace(/\s+/g, " ")).filter(w => w && w.length <= 40))]);
+    const match = CATS.some(x => x.id === c.match) ? c.match : "";
+    return Object.freeze({ id: "o" + i, icon: String(c.icon || "📦").slice(0, 4), name: String(c.name || "فئة " + (i + 1)).slice(0, 30), base, list: base, defs: Object.freeze({}), orig: true, match });
   }).filter(c => c.list.length);
+  bothCache = null;
 }
 loadOrig();
 const hasOrig = () => ORIG_CATS.length > 0;
-const packOf = st => st && st.pack === "orig" && hasOrig() ? "orig" : "claude";
-const packCats = p => p === "orig" && hasOrig() ? ORIG_CATS : CATS;
+const packOf = st => st && (st.pack === "orig" || st.pack === "both") && hasOrig() ? st.pack : "claude";
+// الزوج: فئة Claude + نفس الفئة من الأصلية = فئة وحدة مخلطة
+function bothCats(){
+  if(bothCache) return bothCache;
+  const out = CATS.map(c => {
+    const add = ORIG_CATS.filter(o => o.match === c.id);
+    if(!add.length) return c;
+    const list = [...new Set([...c.list, ...add.flatMap(o => o.list)])];
+    return { id: c.id, icon: c.icon, name: c.name, list, defs: c.defs, mix: true };
+  });
+  return bothCache = [...out, ...ORIG_CATS.filter(o => !o.match)];
+}
+const packCats = p => !hasOrig() ? CATS : p === "orig" ? ORIG_CATS : p === "both" ? bothCats() : CATS;
+const srcOf = c => c.src || (c.mix ? "mix" : c.orig ? "orig" : "claude");
 const packWords = p => packCats(p).reduce((n, c) => n + c.list.length, 0);
-const packInfo = p => ({ pack: p, n: packWords(p), cats: packCats(p).map(c => ({ id: c.id, name: c.name, icon: c.icon })) });
+const packInfo = p => ({ pack: p, n: packWords(p), cats: packCats(p).map(c => ({ id: c.id, name: c.name, icon: c.icon, src: srcOf(c) })) });
 // الفئات المختارة لازم يكونو من نفس الباقة
 function fixPackCats(st){
   const p = packOf(st); st.pack = p;
@@ -151,6 +170,7 @@ function pickImage(maxSide, square){
   });
 }
 function applyEdits(){
+  bothCache = null;
   for(const c of CATS){
     const e = wordEdits[c.id] || { added: [], removed: [] };
     c.list = [...new Set([...e.added, ...c.base.filter(w => !e.removed.includes(w))])];
@@ -159,7 +179,7 @@ function applyEdits(){
 applyEdits();
 function pickWord(catIds, pack){
   const all = packCats(pack || "claude");
-  const pool = catIds.map(catById).filter(c => c && c.list.length && all.includes(c));
+  const pool = all.filter(c => catIds.includes(c.id) && c.list.length);
   const cats = pool.length ? pool : all.filter(c => c.list.length);
   if(!cats.length) return null;
   // اختيار فئة حسب عدد كلماتها
@@ -177,9 +197,17 @@ function catsLabel(ids, pack){
   if(ids.length === 1){ const c = catById(ids[0]); return c.icon + " " + c.name; }
   return "🎲 " + ids.length + " فئات";
 }
+// الألوان: 🤖 Claude أزرق • 📦 الأصلية برتقالي • 🤖📦 مخلطين نص ونص
+const SRC_TAG = { claude: "🤖", orig: "📦", mix: "🤖📦" };
+const SRC_NAME = { claude: "🤖 Claude", orig: "📦 الأصلية", mix: "🤖📦 مخلطين" };
 function renderCatGrid(el, selected, onToggle, list){
+  list = list || CATS;
+  const srcs = list.map(srcOf), kinds = ["claude", "mix", "orig"].filter(k => srcs.includes(k)), multi = kinds.length > 1;
   el.classList.toggle("readonly", !onToggle);
-  el.innerHTML = (list || CATS).map(c => `<button class="cat ${selected.includes(c.id) ? "sel" : ""}" data-id="${c.id}"><span class="ic">${c.icon}</span><span class="nm">${esc(c.name)}</span></button>`).join("");
+  el.classList.toggle("multi", multi);
+  el.innerHTML = (multi ? `<div class="cat-legend">${kinds.map(k => `<span class="lg ${k}">${SRC_NAME[k]}</span>`).join("")}</div>` : "") +
+    list.map((c, i) => { const s = srcs[i], col = multi || s !== "claude";
+      return `<button class="cat ${col ? "src-" + s : ""} ${selected.includes(c.id) ? "sel" : ""}" data-id="${esc(c.id)}"><span class="ic">${esc(c.icon)}</span><span class="nm">${esc(c.name)}</span>${multi ? `<span class="src">${SRC_TAG[s]}</span>` : ""}</button>`; }).join("");
   if(onToggle) el.querySelectorAll(".cat").forEach(b => b.onclick = () => { vibe(8); onToggle(b.dataset.id); });
 }
 
@@ -407,7 +435,7 @@ let pcfg = store.get("passCfg", { players: 4, imps: 1, hint: true, names: [], ca
 fixPackCats(pcfg);
 // تبديل الباقة (هاتف واحد ولا القائد)
 function choosePack(p, apply){
-  if(p === "orig" && !hasOrig()){ toast("📦 ما زدتش الكلمات الأصلية — زيدها من ✏️ تعديل الكلمات"); return; }
+  if(p !== "claude" && !hasOrig()){ toast("📦 ما زدتش الكلمات الأصلية — زيدها من ✏️ تعديل الكلمات"); return; }
   apply(st => { st.pack = p; st.cats = packCats(p).map(c => c.id); });
   toast("✅ رايح نستعملو: " + PACKS[p]); vibe(15);
 }
@@ -416,8 +444,8 @@ const pMaxImps = () => Math.max(1, Math.floor((pcfg.players - 1) / 2));
 function settingsHTML(prefix, s, editable, info){
   const cur = info ? info.pack : packOf(s), n = info ? info.n : packWords(cur);
   return `<div class="label">📚 الكلمات اللي نلعبو بيها</div>
-    <div class="pick-row pack-row">${["claude", "orig"].map(p => `<button type="button" ${editable ? "" : "disabled"} class="${cur === p ? "on" : ""}" data-${prefix}pack="${p}">${PACKS[p]}</button>`).join("")}</div>
-    <div class="pack-now">✅ رايح نستعملو: <b>${PACKS[cur]}</b> — ${n.toLocaleString("en")} كلمة</div>
+    <div class="pick-row pack-row">${PACK_IDS.map(p => `<button type="button" ${editable ? "" : "disabled"} class="${cur === p ? "on" : ""}" data-${prefix}pack="${p}">${PACK_BTN[p]}</button>`).join("")}</div>
+    <div class="pack-now">✅ رايح نستعملو: <b>${PACKS[cur] || PACKS.claude}</b> — ${n.toLocaleString("en")} كلمة</div>
     <div class="row set-row"><div><div class="label">عدد المحتالين</div><div class="small">يتم اختيارهم عشوائياً</div></div>
     <div class="stepper"><button ${editable ? "" : "disabled"} data-${prefix}imps="1">+</button><b>${s.imps}</b><button ${editable ? "" : "disabled"} data-${prefix}imps="-1">−</button></div></div>
     <div class="row set-row"><div><div class="label">المحتال يشوف الفئة</div><div class="small">تلميح صغير للمحتال</div></div>
@@ -467,7 +495,7 @@ function passStart(){
   const players = Array.from({ length: pcfg.players }, (_, i) => pcfg.names[i] || ("اللاعب " + (i + 1)));
   pgame = { cat, word, players, imps: fairPick(players.map((_, i) => i), Math.min(pcfg.imps, pMaxImps()), passHist(players)), turn: 0,
     def: pcfg.showDef === false ? "" : getDef(cat.id, word) };
-  $("passCat").textContent = (pack === "orig" ? "📦 الأصلية" : "🤖 Claude") + " • " + catsLabel(pcfg.cats, pack);
+  $("passCat").textContent = { claude: "🤖 Claude", orig: "📦 الأصلية", both: "🤝 Claude + الأصلية" }[pack] + " • " + catsLabel(pcfg.cats, pack);
   $("pFlip").innerHTML = cardHTML();
   passTurn(); show("s-pass");
 }
@@ -865,7 +893,7 @@ class HostRoom {
     const show = this.settings.showDef !== false;
     const nameOf = {}; for(const id of ids) nameOf[id] = this.player(id).name;
     this.impHist = this.impHist || [];
-    this.round = { no: (this.round ? this.round.no : 0) + 1, ids, imps: fairPick(ids, imps, this.impHist), word, cat: cat.id, seen: [], first: null,
+    this.round = { no: (this.round ? this.round.no : 0) + 1, ids, imps: fairPick(ids, imps, this.impHist), word, cat: cat.id, catName: cat.name, seen: [], first: null,
       nameOf, pack, def: show ? getDef(cat.id, word) : "" };
     this.phase = "card";
     this.sync();
@@ -904,7 +932,7 @@ class HostRoom {
       round: null
     };
     if(r && this.phase !== "lobby"){
-      const cat = catById(r.cat);
+      const cat = catById(r.cat) || { name: r.catName || "؟" };
       const nm = id => (this.player(id) || {}).name || (r.nameOf && r.nameOf[id]) || "؟";
       s.round = {
         no: r.no, pack: r.pack || "claude", inRound, count: r.ids.length, seen: r.seen.filter(id => r.ids.includes(id)).length, pids: r.ids.slice(),
@@ -1280,7 +1308,7 @@ function renderRound(s){
     if(s.phase === "card") vibe([20, 30, 20]);
   }
   fillCard($("wFlip"), { ...r.me, againText: "سيّب صبعك باش تخبّيها" });
-  document.querySelectorAll("[data-packchip]").forEach(e => e.textContent = "📚 الكلمات: " + PACKS[r.pack === "orig" ? "orig" : "claude"]);
+  document.querySelectorAll("[data-packchip]").forEach(e => e.textContent = "📚 الكلمات: " + (PACKS[r.pack] || PACKS.claude));
   const look = { def: defLine(r.me) };
   // كلمتي تبقى متاحة طول الجولة (ضغط مطوّل)
   $("peekCat").textContent = "الفئة: " + (r.me.isImp && !r.me.hint ? "؟" : r.me.catName);
@@ -1457,8 +1485,11 @@ function renderWordCats(){
 const picked = new Set();
 function openWordCat(id){
   editCat = catById(id);
+  if(!editCat) return;
   picked.clear();
-  $("wcTitle").textContent = editCat.icon + " " + editCat.name;
+  const ro = !!editCat.orig;
+  $("s-words-cat").classList.toggle("ro", ro);
+  $("wcTitle").textContent = editCat.icon + " " + editCat.name + (ro ? " 🔒" : "");
   $("wcNew").value = ""; $("wcSearch").value = "";
   renderWordList(); show("s-words-cat");
 }
@@ -1471,6 +1502,13 @@ function renderWordList(){
   const words = visibleWords();
   for(const w of [...picked]) if(!c.list.includes(w)) picked.delete(w);
   $("wcCount").textContent = c.list.length;
+  if(c.orig){
+    // 🔒 الكلمات الأصلية: تتشاف برك
+    $("wcList").innerHTML = words.length ? words.map(w => `<div class="wrow ro"><span class="w">${esc(w)}</span><span class="lock">🔒</span></div>`).join("")
+      : `<div class="small" style="text-align:center;padding:16px">ما لقينا حتى كلمة</div>`;
+    $("wcReset").classList.add("hidden");
+    return;
+  }
   $("wcList").innerHTML = words.length ? words.map(w => `<div class="wrow ${picked.has(w) ? "sel" : ""}" data-w="${esc(w)}"><span class="ck"></span>
       <span class="w">${esc(w)}<small>${esc(getDef(c.id, w) || "— بلا تعريف")}</small></span>
       ${(e.added || []).includes(w) ? `<span class="new">جديدة</span>` : ""}
@@ -1516,7 +1554,7 @@ $("wcDel").onclick = async () => {
 function addToCat(catId, raw, rawDef){
   const w = String(raw).trim().replace(/\s+/g, " ").slice(0, 30);
   const def = String(rawDef || "").trim().replace(/\s+/g, " ").slice(0, 80);
-  const c = catById(catId); if(!w || !c) return false;
+  const c = claudeCat(catId); if(!w || !c) return false;
   if(c.list.includes(w)) return false;
   const ed = catEdits(catId);
   if(ed.removed.includes(w)) ed.removed = ed.removed.filter(x => x !== w);   // كانت أصلية ونحّيناها
@@ -1540,6 +1578,7 @@ async function addWord(){
 // ----- تعديل كلمة: التعريف -----
 let wsWord = null;
 function openWordSheet(w){
+  if(!editCat || editCat.orig) return;
   wsWord = w;
   $("wsWord").textContent = w;
   $("wsDef").value = getDef(editCat.id, w);
@@ -1623,7 +1662,7 @@ function importWords(text, intoCat){
   let added = 0;
   for(const [cid, words] of Object.entries(lists)){
     const target = intoCat || cid;
-    if(!catById(target) || !Array.isArray(words)) continue;
+    if(!claudeCat(target) || !Array.isArray(words)) continue;
     // كل كلمة مع تعريفها: ["كلمة","تعريف"] (والكودات القديمة: "كلمة")
     for(const it of words){
       const [w, d] = Array.isArray(it) ? it : [it, ""];
@@ -1686,7 +1725,7 @@ $("importData").onclick = () => {
     if(!await ask("نزيدو الكلمات والتعريفات اللي في الملف لهاتفك؟")) return;
     let nw = 0;
     for(const [cid, e] of Object.entries(data.wordEdits || {})){
-      if(!catById(cid)) continue;
+      if(!claudeCat(cid)) continue;
       const ed = catEdits(cid);
       for(const w of e.added || []) if(addToCat(cid, w, (e.defs || {})[w])) nw++;
       for(const w of e.removed || []) if(!ed.removed.includes(w)){ ed.removed.push(w); }
@@ -1700,12 +1739,15 @@ $("importData").onclick = () => {
 $("goWords").onclick = () => { renderWordCats(); renderOrigPanel(); show("s-words"); };
 // ----- الكلمات الأصلية: ملف يتزاد في هذا الهاتف برك -----
 function renderOrigPanel(){
-  const n = packWords("orig");
+  const n = packWords("orig"), mixed = ORIG_CATS.filter(c => c.match), fresh = ORIG_CATS.filter(c => !c.match);
   $("origInfo").innerHTML = hasOrig()
-    ? `✅ كاينين في هاتفك: <b>${n.toLocaleString("en")}</b> كلمة في <b>${ORIG_CATS.length}</b> فئة<br>القائد يختارهم من الإعدادات: 📦 الكلمات الأصلية`
+    ? `✅ كاينين في هاتفك: <b>${n.toLocaleString("en")}</b> كلمة في <b>${ORIG_CATS.length}</b> فئة — 🔒 ما يتبدلوش<br>
+      القائد يختار من الإعدادات: 🤖 Claude • 📦 الأصلية • 🤝 الزوج<br>
+      🤝 في الزوج: ${mixed.length} فئات يتخلطو مع فئات Claude${fresh.length ? ` و ${fresh.length} فئات جداد (${fresh.map(c => esc(c.name)).join("، ")})` : ""}`
     : "ما زالو ما تزادوش. زيد ملف الكلمات (.json) باش القائد يقدر يختارهم.";
-  $("origDel").classList.toggle("hidden", !hasOrig());
-  $("origCats").innerHTML = ORIG_CATS.map(c => `<span class="chip">${esc(c.icon)} ${esc(c.name)} • ${c.list.length}</span>`).join(" ");
+  $("origImport").textContent = hasOrig() ? "📥 بدّلهم بملف جديد" : "📥 زيد من ملف";
+  $("origCats").innerHTML = ORIG_CATS.map(c => `<button type="button" class="chip ochip ${c.match ? "mix" : "new"}" data-oid="${c.id}">${esc(c.icon)} ${esc(c.name)} • ${c.list.length}${c.match ? "" : " ✨"}</button>`).join(" ");
+  $("origCats").querySelectorAll("[data-oid]").forEach(b => b.onclick = () => openWordCat(b.dataset.oid));
 }
 $("origImport").onclick = () => {
   const inp = document.createElement("input");
@@ -1714,19 +1756,15 @@ $("origImport").onclick = () => {
     const f = inp.files && inp.files[0]; if(!f) return;
     let data; try{ data = JSON.parse(await f.text()); }catch(e){ toast("الملف ماشي صحيح"); return; }
     if(!data || data.app !== "mohtal-pack" || !Array.isArray(data.cats)){ toast("هذا ماشي ملف كلمات تاع اللعبة"); return; }
-    const cats = data.cats.filter(x => x && x.name && Array.isArray(x.words)).map(x => ({ name: x.name, icon: x.icon, words: x.words.filter(w => typeof w === "string") }));
+    const cats = data.cats.filter(x => x && x.name && Array.isArray(x.words)).map(x => ({ name: x.name, icon: x.icon, match: typeof x.match === "string" ? x.match : "", words: x.words.filter(w => typeof w === "string") }));
     if(!cats.length){ toast("الملف فارغ"); return; }
+    if(hasOrig() && !await ask("تبدّل الكلمات الأصلية اللي عندك بهذا الملف؟")) return;
     store.set("origPack", { name: String(data.name || "الكلمات الأصلية").slice(0, 40), cats });
-    loadOrig(); renderOrigPanel();
+    loadOrig(); renderOrigPanel(); fixPackCats(pcfg); store.set("passCfg", pcfg);
+    if(isHost && room) room.setSettings(() => {});
     toast(`✅ تزادو ${packWords("orig").toLocaleString("en")} كلمة في ${ORIG_CATS.length} فئة`); vibe([20, 40, 20]);
   };
   inp.click();
-};
-$("origDel").onclick = async () => {
-  if(!await ask("تنحّي الكلمات الأصلية من هاتفك؟ اللعبة ترجع لكلمات Claude.")) return;
-  store.set("origPack", null); loadOrig(); fixPackCats(pcfg); store.set("passCfg", pcfg);
-  if(isHost && room) room.setSettings(() => {});
-  renderOrigPanel(); toast("🗑️ تنحّاو");
 };
 $("wordsBack").onclick = () => { renderWordCats(); show("s-words"); };
 $("wcAdd").onclick = addWord;

@@ -75,6 +75,18 @@ h1 span,.title-xl span{color:var(--accent)}
 .cat .nm{font-weight:700;font-size:12.5px;display:block;line-height:1.35}
 .cat.sel{border-color:var(--accent);background:#3b2f6e}
 .cat.sel::after{content:"✓";position:absolute;top:4px;left:7px;font-size:13px;font-weight:900;color:var(--accent)}
+/* الباقات: 🤖 Claude أزرق • 📦 الأصلية برتقالي • 🤖📦 مخلطين نص ونص */
+.cat.src-claude{background:linear-gradient(160deg,#2f4bb0,#223170)}
+.cat.src-orig{background:linear-gradient(160deg,#b8600f,#6e360a)}
+.cat.src-mix{background:linear-gradient(135deg,#2f4bb0 0 50%,#b8600f 50% 100%)}
+.cat[class*="src-"]:not(.sel){opacity:.55}
+.cat[class*="src-"].sel{box-shadow:0 0 0 1px var(--accent),0 6px 16px rgba(0,0,0,.35)}
+.cat .src{position:absolute;top:4px;right:6px;font-size:10px;line-height:1}
+.cat-legend{grid-column:1/-1;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;font-size:12px;font-weight:800}
+.cat-legend .lg{padding:4px 10px;border-radius:10px}
+.cat-legend .claude{background:#2f4bb0}
+.cat-legend .orig{background:#b8600f}
+.cat-legend .mix{background:linear-gradient(135deg,#2f4bb0 0 50%,#b8600f 50% 100%)}
 .cats.readonly .cat{pointer-events:none}
 .cats.readonly .cat:not(.sel){opacity:.35}
 
@@ -318,3 +330,10 @@ h1 span,.title-xl span{color:var(--accent)}
 .orig-panel{border:1px dashed var(--line)}
 .orig-cats{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
 .orig-cats .chip{font-size:12px}
+.ochip{color:inherit;font-family:inherit;cursor:pointer}
+.ochip.mix{border-color:#2f4bb0;background:linear-gradient(135deg,rgba(47,75,176,.35) 0 50%,rgba(184,96,15,.35) 50% 100%)}
+.ochip.new{border-color:#b8600f;background:rgba(184,96,15,.3)}
+#s-words-cat.ro .ro-hide{display:none!important}
+#s-words-cat:not(.ro) .ro-show{display:none!important}
+.wrow.ro{cursor:default}
+.wrow.ro .lock{font-size:12px;opacity:.6}
