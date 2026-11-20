@@ -490,7 +490,7 @@ document.querySelector("[data-quit-pass]").onclick = async () => { if(await ask(
 //   وضع الواي فاي
 // ============================================================
 // ?as=xxx للتجربة على الحاسوب فقط (كل نافذة كأنها هاتف مختلف)
-const TEST_AS = !NATIVE && new URLSearchParams(location.search).get("as");
+const TEST_AS = !NATIVE && /^(localhost|127.0.0.1)$/.test(location.hostname) && new URLSearchParams(location.search).get("as");
 // للتجربة على الحاسوب: كل نافذة تحفظ غرفتها وحدها
 const SK = k => (TEST_AS ? "t_" + TEST_AS + "_" : "") + k;
 const myId = TEST_AS || store.get("myId", null) || (() => { const id = uid(); store.set("myId", id); return id; })();
