@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="مين المحتال؟">
 <meta name="description" content="مين المحتال؟ لعبة جماعية بالعربية — صُنع بواسطة Chaker Red">
-<link rel="stylesheet" href="style.css?v=220">
+<link rel="stylesheet" href="style.css?v=230">
 </head>
 <body>
 <div class="app">
@@ -117,9 +117,8 @@
     <div class="label">📦 الكلمات الأصلية 🔒 <span class="small">(تتشاف برك، ما تتعدلش)</span></div>
     <div class="small" id="origInfo"></div>
     <div id="origCats" class="orig-cats"></div>
-    <div class="share-row"><button class="btn ghost small-btn" id="origImport">📥 زيد من ملف</button></div>
   </div>
-  <div class="label" style="margin-top:4px">🤖 كلمات Claude (تتعدل)</div>
+  <div class="label" style="margin-top:4px">🔥 كلمات Chaker (تتعدل)</div>
   <div class="wcats" id="wcats"></div>
 </section>
 
@@ -267,6 +266,18 @@
   <div class="small" style="text-align:center" id="fConn"></div>
 </section>
 
+<!-- ===== الدخول للغرفة: نحاولو ندخلو / ما قدرناش ===== -->
+<section class="screen" id="s-joining">
+  <div class="center join-box">
+    <div class="join-ic spin" id="jIcon">🔄</div>
+    <div class="big" id="jTitle">نحاولو ندخلو للغرفة…</div>
+    <div class="small" id="jSub"></div>
+    <div class="join-meta" id="jMeta"></div>
+    <button class="btn hidden" id="jRetry">🔄 عاود حاول</button>
+    <button class="btn ghost" id="jCancel">✕ إلغاء</button>
+  </div>
+</section>
+
 <!-- ===== واي فاي: الغرفة / اللعب ===== -->
 <section class="screen" id="s-w-room">
   <div class="top">
@@ -368,8 +379,10 @@
   <div id="v-wait" class="view">
     <div class="center">
       <div class="emoji">⏳</div>
-      <div class="big">الجولة بدات</div>
-      <div class="small">رايح تدخل مع الجولة الجاية</div>
+      <div class="big">الجولة بدات قبل ما تدخل</div>
+      <div class="small">راك في الغرفة ✔ — ما تقدرش تدخل لهذي الجولة، تلعب في <b>الجولة الجاية</b> 👍</div>
+      <div class="wait-now" id="wWaitNow"></div>
+      <div class="small" id="wWaitPl"></div>
     </div>
   </div>
 </section>
@@ -414,10 +427,11 @@
 <script src="config.js"></script>
 <script src="capacitor.js"></script>
 <script src="qrcode.js"></script>
-<script src="mqtt.min.js?v=220"></script>
+<script src="mqtt.min.js?v=230"></script>
 <script src="words.js"></script>
 <script src="words2.js"></script>
 <script src="words3.js"></script>
+<script src="orig-words.js?v=230"></script>
 <script src="defs1.js"></script>
 <script src="defs2.js"></script>
 <script src="defs3.js"></script>
@@ -426,7 +440,7 @@
 <script src="defs6.js"></script>
 <script src="defs7.js"></script>
 <script src="defs8.js"></script>
-<script src="app.js?v=220"></script>
-<script src="online.js?v=220"></script>
+<script src="app.js?v=230"></script>
+<script src="online.js?v=230"></script>
 </body>
 </html>

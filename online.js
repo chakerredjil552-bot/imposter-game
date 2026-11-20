@@ -98,6 +98,9 @@ class OnlineHostLink {
     this.offStatus = relay.onStatus(up => { if(!this.closed) this.onStatus(up ? "up" : "down", this); });
     this.timer = setInterval(() => this.tick(), 3000);
     this.n = 0;
+    // رجع للتطبيق: نبضة فوراً باش اللاعبين يعرفو بلي راه هنا
+    this.onVis = () => { if(!document.hidden && !this.closed){ this.tick(); this.post(this.base + "/a", { t: "hhb" }); } };
+    document.addEventListener("visibilitychange", this.onVis);
     setTimeout(() => { if(!this.closed) this.onStatus(relay.up ? "up" : "down", this); }, 0);
   }
   isOpen(){ return relay.up; }
@@ -112,6 +115,9 @@ class OnlineHostLink {
   }
   tick(){
     const now = Date.now();
+    // التطبيق تاع القائد كان واقف (خلفية): نعطيو للاعبين مهلة باش ما يبانوش "خرجو" الكل مرة وحدة
+    if(this.lastTick && now - this.lastTick > 9000) for(const id of this.last.keys()) this.last.set(id, now);
+    this.lastTick = now;
     for(const [id, t] of this.last) if(!this.gone.has(id) && now - t > 16000){ this.gone.add(id); this.onMsg({ t: "leave", id }); }
     if(++this.n % 2 === 0) this.post(this.base + "/a", { t: "hhb" });     // نبضة القائد: "راني هنا"
   }
@@ -125,20 +131,26 @@ class OnlineHostLink {
     if(this.closed) return;
     this.post(this.base + "/a", { t: "hostgone" });
     this.closed = true; clearInterval(this.timer); this.offStatus();
+    document.removeEventListener("visibilitychange", this.onVis);
     setTimeout(() => relay.unsub(this.base + "/h"), 500);
   }
 }
 
 // اللاعب: يبعث نبضة كل 4 ثواني، ويعرف إذا القائد غاب
 class OnlinePlayerLink {
-  constructor(rc, onMsg, onStatus){
+  constructor(rc, onMsg, onStatus, opts = {}){
     this.rc = rc; this.onMsg = onMsg; this.onStatus = onStatus; this.closed = false;
+    // firstMs: قداش نستناو القائد أول مرة • downMs: قداش نحاولو نرجعو إذا غاب
+    this.firstMs = opts.firstMs || 20000; this.downMs = opts.downMs || 600000;
     this.key = "on:" + rc.id; this.base = `${NSP}/r/${rc.id}`;
     this.created = Date.now(); this.lastHost = 0; this.wasUp = null; this.downSince = 0; this.q = Promise.resolve();
     relay.sub(`${this.base}/p/${myId}`, (t, p) => this.rx(p));
     relay.sub(`${this.base}/a`, (t, p) => this.rx(p));
     this.offStatus = relay.onStatus(() => this.check());
     this.hb = setInterval(() => { this.post({ t: "hb" }); this.check(); }, 4000);
+    // رجع للتطبيق: نقولو للقائد "راني هنا" فوراً
+    this.onVis = () => { if(!document.hidden && !this.closed){ this.post({ t: "hb" }); this.check(); } };
+    document.addEventListener("visibilitychange", this.onVis);
     this.post({ t: "hello" });
     this.check();
   }
@@ -160,9 +172,12 @@ class OnlinePlayerLink {
       if(up) this.downSince = 0; else if(!this.downSince) this.downSince = now;
       this.onStatus(up ? "up" : "down", this);
     }
-    // أول دخول: إذا القائد ما جاوبش في 20 ثانية، الرمز غالط ولا الغرفة مسكّرة
-    if(!this.lastHost && now - this.created > 20000){ this.close(); this.onStatus("dead", this); return; }
-    if(this.downSince && this.lastHost && now - this.downSince > 180000){ this.close(); this.onStatus("dead", this); }
+    // أول دخول: إذا القائد ما جاوبش (20 ثانية، ولا 5 دقايق إذا راهو يرجع لغرفة كان فيها)، الرمز غالط ولا الغرفة مسكّرة
+    // ما نحسبوش الوقت اللي الإنترنت تاعنا طايح فيه
+    if(!relay.up && !this.lastHost && this.lastCheck) this.created += now - this.lastCheck;
+    this.lastCheck = now;
+    if(!this.lastHost && now - this.created > this.firstMs){ this.close(); this.onStatus("dead", this); return; }
+    if(this.downSince && this.lastHost && now - this.downSince > this.downMs){ this.close(); this.onStatus("dead", this); }
   }
   post(obj){
     if(this.closed) return;
@@ -173,6 +188,7 @@ class OnlinePlayerLink {
   close(){
     if(this.closed) return;
     this.closed = true; clearInterval(this.hb); this.offStatus();
+    document.removeEventListener("visibilitychange", this.onVis);
     relay.unsub(`${this.base}/p/${myId}`); relay.unsub(`${this.base}/a`);
   }
 }

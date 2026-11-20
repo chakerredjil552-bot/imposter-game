@@ -80,18 +80,18 @@ function avColor(id){ let h = 0; for(const c of String(id)) h = (h * 31 + c.char
 const CATS = RAW_CATEGORIES.map(c => ({ id: c.id, icon: c.icon, name: c.name.replace(" 🇩🇿", ""),
   base: [...new Set(c.words.split("\n").map(s => s.trim()).filter(Boolean))], list: [] }));
 const catById = id => CATS.find(c => c.id === id) || ORIG_CATS.find(c => c.id === id);
-// غير كلمات Claude يتعدلو — الكلمات الأصلية مقفولة 🔒
+// غير كلمات Chaker يتعدلو — الكلمات الأصلية مقفولة 🔒
 const claudeCat = id => CATS.find(c => c.id === id);
 // ----- باقات الكلمات -----
-// 🤖 كلمات Claude: اللي جات مع اللعبة (تتعدل) • 📦 الكلمات الأصلية: يزيدها صاحب الهاتف من ملف (تبقى في هاتفو برك، ما تتعدلش)
+// 🔥 كلمات Chaker: كلمات اللعبة (تتعدل) • 📦 الكلمات الأصلية: جات مع اللعبة (orig-words.js) وما تتعدلش
 // 🤝 الزوج: الفئات اللي كاينة في الزوج يتخلطو، والفئات الجديدة تاع الأصلية يبانو وحدهم
-// في الغرفة، الكلمات تتختار في هاتف القائد: اللاعبين ما يحتاجوش الباقة
-const PACKS = { claude: "🤖 كلمات Claude", orig: "📦 الكلمات الأصلية", both: "🤝 Claude + الأصلية" };
-const PACK_BTN = { claude: "🤖 Claude", orig: "📦 الأصلية", both: "🤝 الزوج" };
+// (الاسم الداخلي "claude" بقى كيما هو باش الإعدادات القديمة تخدم)
+const PACKS = { claude: "🔥 كلمات Chaker", orig: "📦 الكلمات الأصلية", both: "🤝 Chaker + الأصلية" };
+const PACK_BTN = { claude: "🔥 Chaker", orig: "📦 الأصلية", both: "🤝 الزوج" };
 const PACK_IDS = ["claude", "orig", "both"];
 let ORIG_CATS = [], bothCache = null;
 function loadOrig(){
-  const p = store.get("origPack", null);
+  const p = typeof ORIG_PACK !== "undefined" ? ORIG_PACK : null;
   ORIG_CATS = !p || !Array.isArray(p.cats) ? [] : p.cats.map((c, i) => {
     const base = Object.freeze([...new Set((c.words || []).map(w => String(w).trim().replace(/\s+/g, " ")).filter(w => w && w.length <= 40))]);
     const match = CATS.some(x => x.id === c.match) ? c.match : "";
@@ -100,9 +100,10 @@ function loadOrig(){
   bothCache = null;
 }
 loadOrig();
+try{ localStorage.removeItem("origPack"); }catch(e){}   // نسخة 2.1/2.2 كانت تزيدهم من ملف
 const hasOrig = () => ORIG_CATS.length > 0;
 const packOf = st => st && (st.pack === "orig" || st.pack === "both") && hasOrig() ? st.pack : "claude";
-// الزوج: فئة Claude + نفس الفئة من الأصلية = فئة وحدة مخلطة
+// الزوج: فئة Chaker + نفس الفئة من الأصلية = فئة وحدة مخلطة
 function bothCats(){
   if(bothCache) return bothCache;
   const out = CATS.map(c => {
@@ -197,9 +198,9 @@ function catsLabel(ids, pack){
   if(ids.length === 1){ const c = catById(ids[0]); return c.icon + " " + c.name; }
   return "🎲 " + ids.length + " فئات";
 }
-// الألوان: 🤖 Claude أزرق • 📦 الأصلية برتقالي • 🤖📦 مخلطين نص ونص
-const SRC_TAG = { claude: "🤖", orig: "📦", mix: "🤖📦" };
-const SRC_NAME = { claude: "🤖 Claude", orig: "📦 الأصلية", mix: "🤖📦 مخلطين" };
+// الألوان: 🔥 Chaker أزرق • 📦 الأصلية برتقالي • 🔥📦 مخلطين نص ونص
+const SRC_TAG = { claude: "🔥", orig: "📦", mix: "🔥📦" };
+const SRC_NAME = { claude: "🔥 Chaker", orig: "📦 الأصلية", mix: "🔥📦 مخلطين" };
 function renderCatGrid(el, selected, onToggle, list){
   list = list || CATS;
   const srcs = list.map(srcOf), kinds = ["claude", "mix", "orig"].filter(k => srcs.includes(k)), multi = kinds.length > 1;
@@ -387,10 +388,16 @@ function parseInvite(text){
   const [ip, port] = r.split(":");
   return { ip, port: +port || PORT };
 }
-function goPendingJoin(){
+async function goPendingJoin(){
   if(!pendingJoin) return;
-  if(net){ toast("راك في غرفة دوك — اخرج منها أولاً"); pendingJoin = null; return; }
   const p = pendingJoin; pendingJoin = null;
+  if(net){
+    const act = store.get(SK("activeRoom"), null);
+    // نفس الغرفة اللي راك فيها (ولا راك تحاول ترجعلها): نكمّلو برك
+    if(!isHost && act && (p.online ? act.code === p.online : act.ip === p.ip && +act.port === +p.port)){ if(lastState) show("s-w-room"); else showJoining(); return; }
+    if(!await ask(isHost ? "راك فاتح غرفة. تسكّرها وتدخل لغرفة صاحبك؟" : "راك في غرفة أخرى. تخرج منها وتدخل لهذي؟")) return;
+    await leaveRoom(true);
+  }
   ensureProfile(() => { openWifi(); if(p.online) joinOnline(p.online); else joinRoom(p.ip, p.port); });
 }
 let pendingFriend = null;
@@ -435,7 +442,7 @@ let pcfg = store.get("passCfg", { players: 4, imps: 1, hint: true, names: [], ca
 fixPackCats(pcfg);
 // تبديل الباقة (هاتف واحد ولا القائد)
 function choosePack(p, apply){
-  if(p !== "claude" && !hasOrig()){ toast("📦 ما زدتش الكلمات الأصلية — زيدها من ✏️ تعديل الكلمات"); return; }
+  if(p !== "claude" && !hasOrig()){ toast("📦 الكلمات الأصلية ما كاينينش في هذي النسخة"); return; }
   apply(st => { st.pack = p; st.cats = packCats(p).map(c => c.id); });
   toast("✅ رايح نستعملو: " + PACKS[p]); vibe(15);
 }
@@ -495,7 +502,7 @@ function passStart(){
   const players = Array.from({ length: pcfg.players }, (_, i) => pcfg.names[i] || ("اللاعب " + (i + 1)));
   pgame = { cat, word, players, imps: fairPick(players.map((_, i) => i), Math.min(pcfg.imps, pMaxImps()), passHist(players)), turn: 0,
     def: pcfg.showDef === false ? "" : getDef(cat.id, word) };
-  $("passCat").textContent = { claude: "🤖 Claude", orig: "📦 الأصلية", both: "🤝 Claude + الأصلية" }[pack] + " • " + catsLabel(pcfg.cats, pack);
+  $("passCat").textContent = { claude: "🔥 Chaker", orig: "📦 الأصلية", both: "🤝 Chaker + الأصلية" }[pack] + " • " + catsLabel(pcfg.cats, pack);
   $("pFlip").innerHTML = cardHTML();
   passTurn(); show("s-pass");
 }
@@ -658,6 +665,8 @@ class Link {
     this.url = url; this.onMsg = onMsg; this.onStatus = onStatus;
     this.closed = false; this.tries = 0; this.queue = []; this.everUp = false;
     this.forever = !!opts.forever;
+    // firstMs: قداش نستناو أول اتصال • downMs: قداش نحاولو نرجعو إذا طاح من بعد
+    this.firstMs = opts.firstMs || 20000; this.downMs = opts.downMs || 600000; this.created = Date.now();
     this.downSince = 0; this.lastRx = 0; this.lastBeat = Date.now();
     this.onVis = () => { if(!document.hidden && !this.closed && !this.isOpen()){ this.tries = 0; this.open(); } };
     document.addEventListener("visibilitychange", this.onVis);
@@ -700,8 +709,8 @@ class Link {
   retry(){
     if(this.closed) return;
     this.tries++;
-    // أول دخول: ~20 ثانية برك. من بعد: نحاولو 3 دقايق قبل ما نستسلمو
-    if(!this.forever && ((!this.everUp && this.tries > 12) || (this.everUp && Date.now() - this.downSince > 180000))){
+    // أول دخول: 20 ثانية (ولا أكثر إذا راهو يرجع لغرفة كان فيها). من بعد: نحاولو 10 دقايق قبل ما نستسلمو
+    if(!this.forever && ((!this.everUp && Date.now() - this.created > this.firstMs) || (this.everUp && Date.now() - this.downSince > this.downMs))){
       this.close(); this.onStatus("dead", this); return;
     }
     clearTimeout(this.rt);
@@ -761,11 +770,11 @@ class HostRoom {
     h.settings = fixPackCats(Object.assign(h.settings, d.settings || {}));
     h.phase = d.phase || "lobby"; h.round = d.round || null;
     h.impHist = d.impHist || []; h.firstHist = d.firstHist || [];
-    for(const p of d.players || []) if(!p.host && p.id !== myId) h.players.push({ ...p, stats: p.stats || cleanStats(), online: false, needWho: true });
+    for(const p of d.players || []) if(!p.host && p.id !== myId) h.players.push({ ...p, stats: p.stats || cleanStats(), online: false, needWho: true, offAt: Date.now() });
     if(h.phase === "lobby") h.players = h.players.filter(p => p.host);
     return h;
   }
-  maxImps(n){ return Math.max(1, Math.floor(((n || this.players.length) - 1) / 2)); }
+  maxImps(n){ return Math.max(1, Math.floor(((n || this.players.filter(p => p.online).length) - 1) / 2)); }
   player(id){ return this.players.find(p => p.id === id); }
   // لاعب رجع ولا دخل جديد
   arrive(id, name, quiet){
@@ -773,21 +782,43 @@ class HostRoom {
     setTimeout(() => this.sendAllPfps(id), 300);
     const p = this.player(id);
     if(p){
-      p.online = true; if(name) p.name = String(name).slice(0, 20);
+      p.online = true; p.offAt = 0; if(name) p.name = String(name).slice(0, 20);
       // غرفة رجعناها من الحفظ: نطلبو منو صورتو وإحصائياتو
       if(p.needWho && net){ p.needWho = false; net.send({ to: id, d: { type: "who" } }); }
       return p;
+    }
+    // نفس الاسم، كان في الجولة وطاح، ورجع بهوية أخرى (بدّل الهاتف، المتصفح، ولا تمسحت البيانات): نرجعولو بلاصتو
+    const r = this.round, nm = String(name || "").slice(0, 20);
+    if(r && this.phase !== "lobby" && nm){
+      const same = this.players.filter(x => !x.host && !x.online && x.name === nm && r.ids.includes(x.id));
+      if(same.length === 1){ this.adopt(same[0], id); toast("🔄 " + nm + " رجع للجولة"); return same[0]; }
     }
     const np = { id, name: String(name || "لاعب").slice(0, 20), online: true };
     this.players.push(np);
     if(!quiet){ toast("👋 " + np.name + " دخل للغرفة"); vibe(15); }
     return np;
   }
-  goneFromRoom(p){
-    // في اللوبي نحيه، وفي الجولة نخليه (يقدر يرجع لنفس الجولة)
-    if(this.phase === "lobby"){ this.players = this.players.filter(x => x !== p); toast("🚪 " + p.name + " خرج"); }
-    else p.online = false;
+  // اللاعب يرجع بنفس بلاصتو (الجولة، الكلمة، الصوت…) بهوية جديدة
+  adopt(p, nid){
+    const old = p.id, q = JSON.stringify(old), nq = JSON.stringify(nid), sw = o => JSON.parse(JSON.stringify(o).split(q).join(nq));
+    p.id = nid; p.online = true; p.offAt = 0; p.needWho = false;
+    this.round = sw(this.round);
+    this.impHist = sw(this.impHist || []); this.firstHist = sw(this.firstHist || []);
+    if(this.pfps[old]){ this.pfps[nid] = this.pfps[old]; delete this.pfps[old]; }
+    if(net) net.send({ to: nid, d: { type: "who" } });
+  }
+  goneFromRoom(p, bye){
+    // خرج بإرادتو من اللوبي: نحيوه. غير هكذا يبقى "غير متصل" شوية (يقدر يرجع لبلاصتو بلا ما يتعاود "خرج / دخل")
+    if(this.phase === "lobby" && bye){ this.players = this.players.filter(x => x !== p); toast("🚪 " + p.name + " خرج"); }
+    else { p.online = false; p.offAt = Date.now(); }
     if(this.phase === "vote") this.checkVoteDone();
+  }
+  // اللوبي: اللي غابو أكثر من دقيقة ونص يتنحاو من القائمة
+  prune(){
+    if(this.phase !== "lobby") return;
+    const now = Date.now(), n = this.players.length;
+    this.players = this.players.filter(p => p.host || p.online || now - (p.offAt || 0) < 90000);
+    if(this.players.length !== n) this.sync();
   }
   // من السيرفر
   onServer(m){
@@ -803,8 +834,7 @@ class HostRoom {
         // ما نعرفوهش: نطلبو منو اسمو وإحصائياتو وصورتو
         if(!known && net) net.send({ to: id, d: { type: "who" } });
       }
-      for(const p of this.players) if(!p.host && !live.has(p.id)) p.online = false;
-      if(this.phase === "lobby") this.players = this.players.filter(p => p.host || p.online);
+      for(const p of this.players) if(!p.host && !live.has(p.id) && p.online){ p.online = false; p.offAt = Date.now(); }
       if(this.phase === "vote") this.checkVoteDone();
       this.sync();
     } else if(m.t === "leave"){
@@ -815,7 +845,7 @@ class HostRoom {
       let p = this.player(m.from);
       // رسالة من لاعب ما وصلناش خبر دخولو (ضاع وقت ما كان القائد يعاود يتصل): ندخلوه
       if(!p){ if(d.a !== "me" || !m.from) return; p = this.arrive(m.from, d.nick); }
-      else if(!p.online && d.a !== "bye"){ p.online = true; this.sync(); }
+      else if(!p.online && d.a !== "bye"){ p.online = true; p.offAt = 0; this.sync(); }
       const r = this.round;
       if(d.a === "seen" && r && (d.no === undefined || d.no === r.no) && r.ids.includes(p.id) && !r.seen.includes(p.id)){ r.seen.push(p.id); this.sync(); }
       if(d.a === "vote") this.castVote(p.id, d.targetId !== undefined ? d.targetId : (r && r.ids[d.target]), d.no);
@@ -824,7 +854,7 @@ class HostRoom {
         const ok = typeof d.data === "string" && d.data.startsWith("data:image/") && d.data.length < 80000;
         this.setPfp(p.id, ok ? d.data : null);
       }
-      if(d.a === "bye"){ this.goneFromRoom(p); this.sync(); }
+      if(d.a === "bye"){ this.goneFromRoom(p, true); this.sync(); }
     }
   }
   // أوامر القائد
@@ -918,7 +948,8 @@ class HostRoom {
   }
   toLobby(){
     this.phase = "lobby";
-    this.players = this.players.filter(p => p.online);
+    const now = Date.now();
+    this.players = this.players.filter(p => p.online || now - (p.offAt || 0) < 90000);
     this.sync();
   }
   // حالة مخصصة لكل لاعب
@@ -1101,33 +1132,100 @@ $("wIpGo").onclick = () => {
 };
 $("wIp").onkeydown = e => { if(e.key === "Enter") $("wIpGo").click(); };
 
+// ----- شاشة الدخول: "نحاولو ندخلو" (ممكن) ولا "ما تقدرش ترجع" (مستحيل) -----
+// تبان من الضغطة حتى توصل حالة الغرفة. إذا الرجوع ممكن نبقاو نحاولو ونوريو الوقت، وإذا مستحيل نقولو علاش
+let joinTry = null, joinTick = null;
+const mmss = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+function showJoining(){
+  const j = joinTry; if(!j) return;
+  j.failed = null;
+  $("jIcon").textContent = "🔄"; $("jIcon").classList.add("spin");
+  $("jTitle").textContent = j.resume ? "نرجعوك للغرفة…" : "نحاولو ندخلو للغرفة…";
+  $("jSub").textContent = j.saveAs.mode === "online"
+    ? (j.resume ? "نستناو القائد يجاوب — إذا هو ثاني راهو يرجع، نستناوه" : "نقلبو على الغرفة " + fmtCode(j.saveAs.code))
+    : (j.resume ? "نعاودو نتصلو بهاتف القائد" : "نتصلو بهاتف القائد في الواي فاي");
+  $("jRetry").classList.add("hidden"); $("jCancel").textContent = "✕ إلغاء";
+  show("s-joining");
+  clearInterval(joinTick); joinTick = setInterval(updJoinMeta, 1000); updJoinMeta();
+}
+function updJoinMeta(){
+  if(!joinTry || joinTry.failed || !$("s-joining").classList.contains("on")){ clearInterval(joinTick); return; }
+  const noNet = joinTry.saveAs.mode === "online" && typeof relay !== "undefined" && !relay.up;
+  $("jMeta").textContent = "⏱️ " + mmss(Date.now() - joinTry.since) + (noNet ? " • 📡 نستناو الإنترنت…" : "");
+}
+const JOIN_FAIL = {
+  notfound: ["🤔", "ما لقيناش الغرفة", "تأكد من الرمز، ولا القائد مازال ما فتحهاش", true],
+  nowifi: ["📶", "ما قدرناش ندخلو للغرفة", "تأكد أنكم في نفس الواي فاي، والقائد مازال فاتح الغرفة", true],
+  noreturn: ["😕", "القائد ما رجعش للغرفة", "يمكن سكّر اللعبة ولا الإنترنت تاعو طاح. تقدر تعاود تحاول", true],
+  lost: ["📡", "ما قدرناش نرجعوك للغرفة", "حاولنا 10 دقايق والقائد ما جاوبش. تقدر تعاود تحاول", true],
+  closed: ["🚪", "القائد سكّر الغرفة", "هذي الغرفة ما بقاتش — اطلب منو يفتح غرفة جديدة", false],
+  kicked: ["😅", "القائد خرّجك من الغرفة", "ما تقدرش ترجع لهذي الغرفة", false],
+  replaced: ["📱", "دخلت لنفس الغرفة من جهة أخرى", "كمّل اللعب من الجهة الأخرى", false],
+};
+function joinFailed(kind){
+  const [ic, t, sub, retry] = JOIN_FAIL[kind];
+  clearInterval(joinTick);
+  if(joinTry) joinTry.failed = kind;
+  $("jIcon").textContent = ic; $("jIcon").classList.remove("spin");
+  $("jTitle").textContent = t; $("jSub").textContent = sub; $("jMeta").textContent = "";
+  $("jRetry").classList.toggle("hidden", !retry);
+  $("jCancel").textContent = "رجوع";
+  show("s-joining"); vibe([30, 50, 30]);
+}
+$("jRetry").onclick = () => { const j = joinTry; if(j) startGuest(j.key, j.makeLink, j.saveAs); };
+$("jCancel").onclick = () => {
+  const j = joinTry;
+  if(j && !j.failed){
+    // وقّف المحاولة. إذا كان راجع لغرفة يبقى زر 🔄، وإذا كانت أول مرة ننساوها
+    if(!j.resume && !j.got) store.set(SK("activeRoom"), null);
+    leaveRoom(false);
+    return;
+  }
+  if(j && (j.failed === "notfound" || j.failed === "nowifi") && !HOSTED){ openWifi(); openFind(j.saveAs.mode !== "online"); return; }
+  openWifi();
+};
+// الغرفة اللي كنا فيها (نفس الرمز ولا نفس الواي فاي) ومازال ما فاتش عليها بزاف
+function wasInRoom(saveAs){
+  const a = store.get(SK("activeRoom"), null);
+  if(!a || !a.at || Date.now() - a.at > RESUME_MAX || a.mode !== saveAs.mode) return false;
+  return saveAs.mode === "online" ? a.code === saveAs.code : a.ip === saveAs.ip && +a.port === +saveAs.port;
+}
+
 // لاعب يدخل لغرفة (واي فاي ولا أونلاين): نفس المنطق، غير الطريق يتبدل
 function startGuest(key, makeLink, saveAs){
   const name = needName(); if(!name) return;
   stopDiscovery();
   // ضغطة مزدوجة على نفس الغرفة: ما نفتحوش اتصال ثاني (كانو يتعاركو ويبقى "إعادة الاتصال")
-  if(net && !isHost && net.key === key && !net.closed) return;
+  if(net && !isHost && net.key === key && !net.closed){ if(lastState) show("s-w-room"); else showJoining(); return; }
+  const resume = wasInRoom(saveAs);
   if(net){ const old = net; net = null; old.close(); }
   if(isHost){ isHost = false; store.set(SK("hostSave"), null); }
   room = null; lastState = null; resetRoundView();
   store.set(SK("activeRoom"), { ...saveAs, at: Date.now() });
-  let gotState = false, helloT = null, helloN = 0;
+  joinTry = { key, makeLink, saveAs, resume, since: Date.now(), got: false, failed: null };
+  const jt = joinTry;
+  let gotState = false, helloT = null, helloN = 0, savedAt = Date.now();
+  const end = kind => { if(kind === "closed" || kind === "kicked" || kind === "replaced") clearSaves(); leaveRoom(false, true); joinFailed(kind); };
   const link = makeLink(m => {
     if(net !== link) return;
-    if(m.t === "msg" && m.d && m.d.type === "state"){ gotState = true; link.stateAt = Date.now(); onState(m.d.s); }
+    if(m.t === "msg" && m.d && m.d.type === "state"){
+      gotState = true; jt.got = true; link.stateAt = Date.now();
+      // نحدّثو وقت الغرفة (الرجوع التلقائي يتحسب من آخر مرة كنا فيها، ماشي من وقت الدخول)
+      if(Date.now() - savedAt > 20000){ savedAt = Date.now(); store.set(SK("activeRoom"), { ...saveAs, at: savedAt }); }
+      onState(m.d.s);
+    }
     else if(m.t === "msg" && m.d && m.d.type === "who"){ sendMe(); net.send({ d: { a: "pfp", data: myPfp || null } }); }
     else if(m.t === "msg" && m.d && m.d.type === "pfp"){ pfpCache[m.d.id] = m.d.data || null; if(lastState) refreshAvatars(); }
-    else if(m.t === "kicked"){ clearSaves(); leaveRoom(false); toast("القائد خرّجك من الغرفة 😅"); }
-    else if(m.t === "hostgone"){ clearSaves(); leaveRoom(false); toast("القائد سكّر الغرفة"); }
+    else if(m.t === "kicked") end("kicked");
+    else if(m.t === "hostgone") end("closed");
   }, (st, l) => {
     if(l !== net) return;                       // اتصال قديم
-    if(st === "dead" && !gotState){
-      store.set(SK("activeRoom"), null); leaveRoom(false);
-      toast(saveAs.mode === "online" ? "ما لقيناش الغرفة 🤔 تأكد من الرمز، ولا القائد مازال ما فتحهاش" : "ما قدرناش ندخلو للغرفة. تأكد أنكم في نفس الواي فاي");
-      if(!HOSTED) openFind(saveAs.mode !== "online");
-      return;
+    if(st === "dead"){
+      if(gotState) return end("lost");
+      if(!resume) store.set(SK("activeRoom"), null);
+      return end(resume ? "noreturn" : saveAs.mode === "online" ? "notfound" : "nowifi");
     }
-    if(st === "replaced"){ store.set(SK("activeRoom"), null); leaveRoom(false); toast("دخلت لنفس الغرفة من جهة أخرى"); return; }
+    if(st === "replaced") return end("replaced");
     connStatus(st);
     if(st === "up"){
       // نعرّفو روحنا للقائد. إذا ما جاتناش الحالة في 3 ثواني نعاودو (يمكن القائد ما سمعش بينا)
@@ -1142,17 +1240,18 @@ function startGuest(key, makeLink, saveAs){
       hello();
       net.send({ d: { a: "pfp", data: myPfp || null } });
     }
-  });
+  // رجوع لغرفة كنا فيها: نستناو 5 دقايق (القائد يمكن راهو يرجع هو ثاني). أول مرة: 20 ثانية
+  }, { firstMs: resume ? 300000 : 20000, downMs: 600000 });
   link.key = key;
   net = link;
   keepAwake(true);
   renderResume();
-  toast("⏳ نتصلو بالغرفة…");
+  showJoining();
 }
 function joinRoom(ip, port){
   const name = needName(); if(!name) return;
   const url = `ws://${ip}:${port}/?role=player&id=${encodeURIComponent(myId)}&name=${encodeURIComponent(name)}`;
-  startGuest("wifi:" + ip + ":" + port, (onMsg, onSt) => new Link(url, onMsg, onSt), { mode: "wifi", ip, port });
+  startGuest("wifi:" + ip + ":" + port, (onMsg, onSt, o) => new Link(url, onMsg, onSt, o), { mode: "wifi", ip, port });
 }
 async function joinOnline(code){
   if(!needName()) return;
@@ -1161,18 +1260,28 @@ async function joinOnline(code){
   if(!isRoomCode(code)){ toast("رمز الغرفة فيه 8 حروف ✍️"); return; }
   await onlineInit();
   const rc = await roomCrypto(code);
-  startGuest("on:" + rc.id, (onMsg, onSt) => new OnlinePlayerLink(rc, onMsg, onSt), { mode: "online", code });
+  startGuest("on:" + rc.id, (onMsg, onSt, o) => new OnlinePlayerLink(rc, onMsg, onSt, o), { mode: "online", code });
 }
-// شريط "إعادة الاتصال": يبان غير إذا الاتصال طاح أكثر من ثانية ونص (باش ما يبقاش يرمش)
-let connT = null;
+// شريط "نرجعوك للغرفة": يبان غير إذا الاتصال طاح أكثر من ثانية ونص (باش ما يبقاش يرمش)، ويوري الوقت
+let connT = null, connAt = 0, connTick = null;
+function connBar(){
+  if(!net || net.isOpen() || !connAt){ $("wConn").classList.add("hidden"); clearInterval(connTick); return; }
+  $("wConn").textContent = (isHost ? "⏳ نعاودو نتصلو… " : "🔄 نحاولو نرجعوك للغرفة… ") + mmss(Date.now() - connAt) + " — ما تخرجش، نرجعو وحدنا";
+  $("wConn").classList.remove("hidden");
+}
 function connStatus(st){
-  if(st === "up"){ clearTimeout(connT); connT = null; $("wConn").classList.add("hidden"); return; }
-  if(st === "down"){ if(!connT && $("wConn").classList.contains("hidden")) connT = setTimeout(() => { connT = null; if(net && !net.isOpen()) $("wConn").classList.remove("hidden"); }, 1500); return; }
-  if(st === "dead"){ clearTimeout(connT); connT = null; $("wConn").classList.add("hidden"); leaveRoom(false); toast("انقطع الاتصال مع الغرفة — تقدر ترجع من زر 🔄"); }
+  if(st === "up"){ clearTimeout(connT); connT = null; connAt = 0; clearInterval(connTick); $("wConn").classList.add("hidden"); return; }
+  if(st === "down"){
+    if(!connAt) connAt = Date.now();
+    if(!connT && $("wConn").classList.contains("hidden")) connT = setTimeout(() => { connT = null; if(net && !net.isOpen()){ connBar(); clearInterval(connTick); connTick = setInterval(connBar, 1000); } }, 1500);
+    return;
+  }
+  if(st === "dead"){ clearTimeout(connT); connT = null; connAt = 0; clearInterval(connTick); $("wConn").classList.add("hidden"); leaveRoom(false); toast("انقطع الاتصال مع الغرفة — تقدر ترجع من زر 🔄"); }
 }
 // sendBye = خرج بإرادتو (✕): ننساو الغرفة. غير هكذا نخليوها باش يقدر يرجع
-async function leaveRoom(sendBye){
-  clearTimeout(connT); connT = null; $("wConn").classList.add("hidden");
+// stay = ما نروحوش لشاشة الواي فاي (شاشة "ما قدرناش ندخلو" تبان بلاصتها)
+async function leaveRoom(sendBye, stay){
+  clearTimeout(connT); connT = null; connAt = 0; clearInterval(connTick); $("wConn").classList.add("hidden");
   const wasHost = isHost, mode = room && room.mode;
   if(net){
     if(sendBye && !isHost) net.send({ d: { a: "bye" } });
@@ -1184,8 +1293,10 @@ async function leaveRoom(sendBye){
   if(sendBye) clearSaves();
   isHost = false; room = null; lastState = null; resetRoundView();
   keepAwake(false);
-  openWifi();
+  if(!stay) openWifi();
 }
+// القائد: اللي غابو بزاف من اللوبي يتنحاو
+setInterval(() => { if(isHost && room && room.prune) room.prune(); }, 10000);
 $("wLeave").onclick = async () => {
   if(await ask(isHost ? "تسكّر الغرفة؟ كل اللاعبين يخرجو." : "تخرج من الغرفة؟")) leaveRoom(true);
 };
@@ -1244,8 +1355,15 @@ function onState(s){
   document.querySelectorAll("#s-w-room .view").forEach(v => v.classList.toggle("on", v.id === "v-" + view));
 
   if(view === "lobby") renderLobby(s, prev);
+  if(view === "wait") renderWait(s);
   if(view === "card" || view === "first" || view === "reveal" || view === "vote") renderRound(s);
   if(s.phase === "reveal") countRound(s);
+}
+// ما يقدرش يدخل لهذي الجولة (بدات بلا بيه): راهو في الغرفة ويلعب في الجاية
+function renderWait(s){
+  const r = s.round;
+  $("wWaitNow").textContent = { card: "👀 راهم يشوفو كلماتهم", first: "🎤 راهم يسقسيو بعضاهم", vote: "🗳️ راهم يصوتو", reveal: "🎭 راهم يشوفو النتيجة" }[s.phase] || "";
+  $("wWaitPl").textContent = r && r.names ? "يلعبو دروك: " + r.names.join("، ") : "";
 }
 function renderLobby(s){
   const isOnline = !!s.code;
@@ -1737,35 +1855,17 @@ $("importData").onclick = () => {
   inp.click();
 };
 $("goWords").onclick = () => { renderWordCats(); renderOrigPanel(); show("s-words"); };
-// ----- الكلمات الأصلية: ملف يتزاد في هذا الهاتف برك -----
+// ----- الكلمات الأصلية: جاو مع اللعبة، تتشاف برك -----
 function renderOrigPanel(){
   const n = packWords("orig"), mixed = ORIG_CATS.filter(c => c.match), fresh = ORIG_CATS.filter(c => !c.match);
   $("origInfo").innerHTML = hasOrig()
-    ? `✅ كاينين في هاتفك: <b>${n.toLocaleString("en")}</b> كلمة في <b>${ORIG_CATS.length}</b> فئة — 🔒 ما يتبدلوش<br>
-      القائد يختار من الإعدادات: 🤖 Claude • 📦 الأصلية • 🤝 الزوج<br>
-      🤝 في الزوج: ${mixed.length} فئات يتخلطو مع فئات Claude${fresh.length ? ` و ${fresh.length} فئات جداد (${fresh.map(c => esc(c.name)).join("، ")})` : ""}`
-    : "ما زالو ما تزادوش. زيد ملف الكلمات (.json) باش القائد يقدر يختارهم.";
-  $("origImport").textContent = hasOrig() ? "📥 بدّلهم بملف جديد" : "📥 زيد من ملف";
+    ? `✅ <b>${n.toLocaleString("en")}</b> كلمة في <b>${ORIG_CATS.length}</b> فئة — 🔒 ما يتبدلوش (اضغط على فئة باش تشوف كلماتها)<br>
+      القائد يختار من الإعدادات: 🔥 Chaker • 📦 الأصلية • 🤝 الزوج<br>
+      🤝 في الزوج: ${mixed.length} فئات يتخلطو مع فئات Chaker${fresh.length ? ` و ${fresh.length} فئات جداد (${fresh.map(c => esc(c.name)).join("، ")})` : ""}`
+    : "ما كاينينش في هذي النسخة.";
   $("origCats").innerHTML = ORIG_CATS.map(c => `<button type="button" class="chip ochip ${c.match ? "mix" : "new"}" data-oid="${c.id}">${esc(c.icon)} ${esc(c.name)} • ${c.list.length}${c.match ? "" : " ✨"}</button>`).join(" ");
   $("origCats").querySelectorAll("[data-oid]").forEach(b => b.onclick = () => openWordCat(b.dataset.oid));
 }
-$("origImport").onclick = () => {
-  const inp = document.createElement("input");
-  inp.type = "file"; inp.accept = ".json,application/json,text/plain";
-  inp.onchange = async () => {
-    const f = inp.files && inp.files[0]; if(!f) return;
-    let data; try{ data = JSON.parse(await f.text()); }catch(e){ toast("الملف ماشي صحيح"); return; }
-    if(!data || data.app !== "mohtal-pack" || !Array.isArray(data.cats)){ toast("هذا ماشي ملف كلمات تاع اللعبة"); return; }
-    const cats = data.cats.filter(x => x && x.name && Array.isArray(x.words)).map(x => ({ name: x.name, icon: x.icon, match: typeof x.match === "string" ? x.match : "", words: x.words.filter(w => typeof w === "string") }));
-    if(!cats.length){ toast("الملف فارغ"); return; }
-    if(hasOrig() && !await ask("تبدّل الكلمات الأصلية اللي عندك بهذا الملف؟")) return;
-    store.set("origPack", { name: String(data.name || "الكلمات الأصلية").slice(0, 40), cats });
-    loadOrig(); renderOrigPanel(); fixPackCats(pcfg); store.set("passCfg", pcfg);
-    if(isHost && room) room.setSettings(() => {});
-    toast(`✅ تزادو ${packWords("orig").toLocaleString("en")} كلمة في ${ORIG_CATS.length} فئة`); vibe([20, 40, 20]);
-  };
-  inp.click();
-};
 $("wordsBack").onclick = () => { renderWordCats(); show("s-words"); };
 $("wcAdd").onclick = addWord;
 $("wcNew").onkeydown = e => { if(e.key === "Enter") addWord(); };
@@ -1789,6 +1889,7 @@ if(APP){
     else if(on.id === "s-friends") openWifi();
     else if(on.id === "s-words-cat") $("wordsBack").click();
     else if(on.id === "s-w-room") $("wLeave").click();
+    else if(on.id === "s-joining") $("jCancel").click();
     else if(on.id.startsWith("s-pass") && on.id !== "s-pass-setup") document.querySelector("[data-quit-pass]").click();
     else show("s-home");
   });
